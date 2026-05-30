@@ -171,20 +171,28 @@ function LoginScreen() {
 					One inbox across every Zuup service. Agentic AI, autonomous auto-replies, smart tool calling, and 100% persistent state — built for founders who value their time.
 				</p>
 				
-				<div className="flex flex-col sm:flex-row items-center gap-4 mb-10">
+				<div className="flex flex-col items-center gap-4 mb-10 w-full sm:w-auto">
+					<div className="flex flex-col sm:flex-row items-center gap-4 w-full">
+						<button 
+							onClick={() => instance.loginRedirect(loginRequest).catch(console.error)}
+							disabled={inProgress !== "none"}
+							className={`w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-medium rounded-lg hover:opacity-90 transition-opacity shadow-[0_0_20px_rgba(244,63,94,0.4)] flex items-center justify-center gap-2 ${inProgress !== "none" ? "opacity-50 cursor-not-allowed" : ""}`}
+						>
+							Create Account →
+						</button>
+						<a 
+							href="#docs"
+							className="w-full sm:w-auto px-8 py-3.5 bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium rounded-lg hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
+						>
+							View Docs
+						</a>
+					</div>
 					<button 
-						onClick={() => instance.loginRedirect(loginRequest).catch(console.error)}
-						disabled={inProgress !== "none"}
-						className={`w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-medium rounded-lg hover:opacity-90 transition-opacity shadow-[0_0_20px_rgba(244,63,94,0.4)] flex items-center justify-center gap-2 ${inProgress !== "none" ? "opacity-50 cursor-not-allowed" : ""}`}
+						onClick={() => { sessionStorage.clear(); window.location.reload(); }}
+						className="text-xs text-zinc-600 hover:text-zinc-400 mt-2 underline transition-colors"
 					>
-						Create Account →
+						Clear Browser Session (Click me if login is stuck!)
 					</button>
-					<a 
-						href="#docs"
-						className="w-full sm:w-auto px-8 py-3.5 bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium rounded-lg hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
-					>
-						View Docs
-					</a>
 				</div>
 				
 				<div className="flex flex-wrap justify-center items-center gap-4 text-xs font-medium text-zinc-500 uppercase tracking-widest">
