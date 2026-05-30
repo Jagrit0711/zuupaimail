@@ -42,3 +42,5 @@ export default {
 	fetch: app.fetch,
 	email: handleIncomingEmail,
 };
+
+export { ChatSession } from "./ChatSession";

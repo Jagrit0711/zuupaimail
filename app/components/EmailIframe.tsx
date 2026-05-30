@@ -2,8 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import DOMPurify from "dompurify";
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface EmailIframeProps {
 	body: string;
@@ -30,6 +29,7 @@ interface EmailIframeProps {
 export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [height, setHeight] = useState(autoSize ? 100 : 0);
+	const [srcDocContent, setSrcDocContent] = useState("");
 
 	// Listen for height reports from the sandboxed iframe
 	const handleMessage = useCallback(
@@ -55,32 +55,45 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 		return () => window.removeEventListener("message", handleMessage);
 	}, [handleMessage]);
 
-	const srcDocContent = useMemo(() => {
-		if (!body || typeof window === "undefined") return "";
+	useEffect(() => {
+		if (!body || typeof window === "undefined") {
+			setSrcDocContent("");
+			return;
+		}
 
-		const cleanBody = DOMPurify.sanitize(body, {
-			USE_PROFILES: { html: true },
-			FORBID_TAGS: ["style"],
-			ADD_ATTR: ["target"],
-			FORCE_BODY: true,
-		});
+		let isMounted = true;
 
-		const padding = autoSize ? "0" : "24px";
+		const sanitizeAndRender = async () => {
+			try {
+				// Dynamically import dompurify only on the client to completely avoid SSR Node.js crashes
+				const DOMPurifyModule = await import("dompurify");
+				const DOMPurify = DOMPurifyModule.default || DOMPurifyModule;
+				
+				if (!isMounted) return;
 
-		const heightScript = autoSize
-			? `<script>
-				function reportHeight() {
-					var h = document.body.scrollHeight;
-					if (h > 0) parent.postMessage({ __emailIframeHeight: true, height: h }, "*");
-				}
-				reportHeight();
-				setTimeout(reportHeight, 50);
-				setTimeout(reportHeight, 150);
-				setTimeout(reportHeight, 400);
-			<\/script>`
-			: "";
+				const cleanBody = DOMPurify.sanitize(body, {
+					USE_PROFILES: { html: true },
+					FORBID_TAGS: ["style"],
+					ADD_ATTR: ["target"],
+					FORCE_BODY: true,
+				});
 
-		return `<!DOCTYPE html>
+				const padding = autoSize ? "0" : "24px";
+
+				const heightScript = autoSize
+					? `<script>
+						function reportHeight() {
+							var h = document.body.scrollHeight;
+							if (h > 0) parent.postMessage({ __emailIframeHeight: true, height: h }, "*");
+						}
+						reportHeight();
+						setTimeout(reportHeight, 50);
+						setTimeout(reportHeight, 150);
+						setTimeout(reportHeight, 400);
+					<\/script>`
+					: "";
+
+				const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -127,14 +140,34 @@ table { border-collapse: collapse; max-width: 100%; }
 td, th { padding: 4px 8px; border-color: #23283b !important; }
 p { margin: 4px 0; }
 h1, h2, h3, h4, h5 { margin: 8px 0 4px; color: #ffffff !important; }
-ul, ol { padding-left: 20px; margin: 4px 0; }
-/* Override inline styles for dark mode */
-[style*="color:"] { color: #ffffff !important; }
-[style*="background-color: #ffffff"], [style*="background: #ffffff"], [style*="background-color:#ffffff"], [style*="background:#ffffff"] { background-color: transparent !important; }
+/* Bulletproof Dark Mode Text Overrides */
+* { color: inherit !important; }
+body { color: #ffffff !important; }
+a, a * { color: #ff3d7f !important; text-decoration: none; }
+a:hover, a *:hover { text-decoration: underline; }
+
+/* Remove common light backgrounds */
+[style*="background-color: #ffffff" i], [style*="background: #ffffff" i], 
+[style*="background-color:#ffffff" i], [style*="background:#ffffff" i], 
+[style*="background-color: white" i], [style*="background: white" i] { 
+	background-color: transparent !important; 
+}
 </style>
 </head>
 <body>${cleanBody}${heightScript}</body>
 </html>`;
+
+				setSrcDocContent(htmlContent);
+			} catch (e) {
+				console.error("Failed to sanitize iframe body:", e);
+			}
+		};
+
+		sanitizeAndRender();
+
+		return () => {
+			isMounted = false;
+		};
 	}, [body, autoSize]);
 
 	return (

@@ -191,40 +191,28 @@ app.get("/api/v1/mailboxes/:mailboxId/search", async (c) => {
 	return c.json({ emails, totalCount: response.value.length });
 });
 
-// -- AI Stateless Agent ---------------------------------------------
-app.post("/api/v1/ai/draft", async (c) => {
-	const body = await c.req.json();
-	const emailText = body.emailText || "";
-	const userPrompt = body.userPrompt || "";
+// -- AI Stateful Agent (Durable Object Proxy) ----------------------
+app.post("/api/v1/ai/chat", async (c) => {
+	const id = c.env.CHAT_SESSION.idFromName("default");
+	const stub = c.env.CHAT_SESSION.get(id);
 	
-	const systemPrompt = `You are a highly capable, professional executive assistant for Jagrit Sachdev (Founder & CEO of Zuup).
-Your job is to draft concise, highly professional, and natural-sounding email replies.
-Avoid corporate buzzwords, generic templates, or robotic phrasing like "Dear [Name]" or "I will take care of the matter".
-Write exactly as a busy CEO would: direct, polite, and to the point.
-NEVER include placeholders like [Your Name] or [Insert Date]. ALWAYS use context clues to fill in names, or omit them if unknown.
-Respond ONLY with the final drafted email body. Do not include any meta-commentary, subject lines, or explanations.`;
+	const req = new Request("http://do/chat", {
+		method: "POST",
+		headers: c.req.raw.headers,
+		body: await c.req.raw.clone().arrayBuffer()
+	});
+	return await stub.fetch(req);
+});
 
-	const finalUserPrompt = `I need you to draft an email reply based on my instructions.
-My instructions: "${userPrompt}"
-
-Here is the email context you are replying to (if any):
-${emailText}
-
-Draft the reply now.`;
-
-	try {
-		const response = await c.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
-			messages: [
-				{ role: "system", content: systemPrompt },
-				{ role: "user", content: finalUserPrompt }
-			]
-		});
-		
-		// @ts-ignore
-		return c.json({ draft: response.response });
-	} catch (e) {
-		return c.json({ error: "Failed to generate AI draft" }, 500);
-	}
+app.get("/api/v1/ai/history", async (c) => {
+	const id = c.env.CHAT_SESSION.idFromName("default");
+	const stub = c.env.CHAT_SESSION.get(id);
+	
+	const req = new Request("http://do/history", {
+		method: "GET"
+	});
+	return await stub.fetch(req);
 });
 
 export { app };
+export { ChatSession } from "./ChatSession";

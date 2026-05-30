@@ -20,8 +20,21 @@
 	},
 	"send_email": [
 		{
-			"type": "send_email",
 			"name": "SEB"
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "CHAT_SESSION",
+				"class_name": "ChatSession"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["ChatSession"]
 		}
 	]
 }

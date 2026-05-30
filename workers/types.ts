@@ -12,4 +12,5 @@ export interface Env extends Cloudflare.Env {
 	AZURE_TENANT_ID: string;
 	AZURE_CLIENT_SECRET: string;
 	SEB: SendEmail;
+	CHAT_SESSION: DurableObjectNamespace;
 }

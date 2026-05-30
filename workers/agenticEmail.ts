@@ -25,10 +25,11 @@ export async function handleIncomingEmail(message: ForwardableEmailMessage, env:
 		});
 		
 		let pastEmailsContext = "No past context available.";
+		let accessToken = "";
 		
 		if (tokenRes.ok) {
 			const tokenData = await tokenRes.json() as { access_token: string };
-			const accessToken = tokenData.access_token;
+			accessToken = tokenData.access_token;
 
 			// Fetch the last 50 sent emails to learn writing style
 			const sentRes = await fetch(`https://graph.microsoft.com/v1.0/users/${env.HUMAN_FALLBACK_EMAIL}/mailFolders/SentItems/messages?$top=50&$select=subject,bodyPreview&$orderby=receivedDateTime DESC`, {
@@ -115,21 +116,37 @@ Body: ${parsedEmail.text || "No text body found."}`;
 		}
 
 		if (decision.action === "reply" && decision.reply_text) {
-			const replyMsg = createMimeMessage();
-			replyMsg.setSender({ name: "Jagrit Sachdev", addr: message.to });
-			replyMsg.setRecipient(message.from);
-			replyMsg.setSubject(`Re: ${parsedEmail.subject}`);
-			replyMsg.addMessage({
-				contentType: "text/plain",
-				data: decision.reply_text
-			});
+			const draftPayload = {
+				subject: `Re: ${parsedEmail.subject || "Your Message"}`,
+				body: { contentType: "text", content: decision.reply_text },
+				toRecipients: [{ emailAddress: { address: sender } }]
+			};
 
 			try {
-				const replyEmailMessage = new EmailMessage(message.to, message.from, replyMsg.asRaw());
-				await env.SEB.send(replyEmailMessage);
-				console.log("Autonomous reply sent successfully!");
+				if (!accessToken) throw new Error("No Graph API token available to create draft.");
+				
+				// 1. Create the draft in Microsoft Graph
+				const draftRes = await fetch(`https://graph.microsoft.com/v1.0/users/${env.HUMAN_FALLBACK_EMAIL}/messages`, {
+					method: "POST",
+					headers: { 
+						"Authorization": `Bearer ${accessToken}`,
+						"Content-Type": "application/json"
+					},
+					body: JSON.stringify(draftPayload)
+				});
+				
+				if (!draftRes.ok) {
+					console.error("Failed to create draft in Graph:", await draftRes.text());
+				} else {
+					console.log("Autonomous draft created in MS Graph Drafts folder successfully!");
+				}
+
+				// 2. Forward the original email to the human inbox so they can see the context of the draft
+				await message.forward(env.HUMAN_FALLBACK_EMAIL);
 			} catch(e) {
-				console.error("Failed to send autonomous reply:", e);
+				console.error("Failed to create auto-draft:", e);
+				// Fallback: just forward it
+				await message.forward(env.HUMAN_FALLBACK_EMAIL);
 			}
 		}
 

@@ -182,8 +182,9 @@ const api = {
 		del<void>(`/api/v1/mailboxes/${mailboxId}/folders/${id}`),
 
 	// Search
-	searchEmails: (mailboxId: string, params: Record<string, string>) =>
-		get<EmailListResponse | Email[]>(`/api/v1/mailboxes/${mailboxId}/search`, { params }),
+	// AI
+	aiChat: (body: any) => post<{ type: string, text: string }>("/api/v1/ai/chat", body),
+	aiHistory: () => get<{ role: string, content: string, type: string }[]>("/api/v1/ai/history"),
 };
 
 export default api;

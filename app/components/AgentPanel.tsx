@@ -3,13 +3,14 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Badge, Button, Loader, Tooltip, useKumoToastManager } from "@cloudflare/kumo";
-import { RobotIcon, ArrowUpIcon, StopIcon, TrashIcon, PaperPlaneTiltIcon, PencilSimpleIcon } from "@phosphor-icons/react";
+import { RobotIcon, ArrowUpIcon, StopIcon, TrashIcon, PaperPlaneTiltIcon, PencilSimpleIcon, UserIcon, CopyIcon } from "@phosphor-icons/react";
 import { useState, useRef, useEffect } from "react";
 import { useParams } from "react-router";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useUIStore } from "~/hooks/useUIStore";
 import { useEmail, useReplyToEmail } from "~/queries/emails";
+import api from "~/services/api";
 
 export default function AgentPanel() {
 	const { mailboxId } = useParams<{ mailboxId: string }>();
@@ -25,6 +26,20 @@ export default function AgentPanel() {
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 
+	// Fetch history on mount
+	useEffect(() => {
+		api.aiHistory().then(history => {
+			if (history && history.length > 0) {
+				const formattedHistory = history.map((msg: any) => ({
+					role: msg.role === "user" ? "user" : "ai",
+					text: msg.content,
+					isDraft: msg.type === "draft"
+				}));
+				setMessages(formattedHistory as any);
+			}
+		}).catch(e => console.error("Failed to load history:", e));
+	}, []);
+
 	useEffect(() => {
 		const el = scrollRef.current;
 		if (el) el.scrollTop = el.scrollHeight;
@@ -39,27 +54,18 @@ export default function AgentPanel() {
 		setIsLoading(true);
 
 		// Prepare context if an email is open
-		let contextStr = "";
+		let emailText = "";
 		if (currentEmail) {
 			const cleanBody = currentEmail.body ? currentEmail.body.replace(/<[^>]*>?/gm, '') : "";
-			contextStr = `\n\n--- CURRENT EMAIL CONTEXT ---\nFrom: ${currentEmail.sender}\nSubject: ${currentEmail.subject}\nBody: ${cleanBody}\n-----------------------------\n`;
+			emailText = `From: ${currentEmail.sender}\nSubject: ${currentEmail.subject}\nBody: ${cleanBody}`;
 		}
 
 		try {
-			const res = await fetch("/api/v1/ai/draft", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ emailText: text + contextStr, userPrompt: text })
-			});
-			
-			if (res.ok) {
-				const data = await res.json();
-				const replyText = data.draft || "No response generated.";
-				const isRefusal = replyText.toLowerCase().includes("not able to fulfill");
-				setMessages(prev => [...prev, { role: "ai", text: replyText, isDraft: !isRefusal }]);
-			} else {
-				setMessages(prev => [...prev, { role: "ai", text: "Error connecting to AI backend." }]);
-			}
+			const data = await api.aiChat({ emailText, userPrompt: text });
+			const replyType = data.type || "chat";
+			const replyText = data.text || "No response generated.";
+			const isDraft = replyType === "draft";
+			setMessages(prev => [...prev, { role: "ai", text: replyText, isDraft }]);
 		} catch (e) {
 			setMessages(prev => [...prev, { role: "ai", text: "Network error." }]);
 		} finally {
@@ -97,7 +103,11 @@ export default function AgentPanel() {
 		startCompose({
 			mode: "reply",
 			originalEmail: currentEmail,
-			draftEmail: { body: `<p>${text.replace(/\n/g, "<br>")}</p>` } as any
+			draftEmail: { 
+				recipient: currentEmail.sender,
+				subject: currentEmail.subject.startsWith("Re:") ? currentEmail.subject : `Re: ${currentEmail.subject}`,
+				body: `<p>${text.replace(/\n/g, "<br>")}</p>`,
+			} as any
 		});
 	};
 
@@ -136,7 +146,7 @@ export default function AgentPanel() {
 						<div key={i} className={`flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
 							<div className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
 								<div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${msg.role === "user" ? "bg-kumo-brand text-white" : "bg-kumo-surface border border-kumo-border"}`}>
-									{msg.role === "user" ? "U" : <RobotIcon size={12} />}
+									{msg.role === "user" ? <UserIcon size={12} /> : <RobotIcon size={12} />}
 								</div>
 								<div className={`rounded-lg px-3 py-2 text-[13px] leading-relaxed max-w-[85%] ${msg.role === "user" ? "bg-kumo-brand text-white rounded-br-sm" : "bg-kumo-surface border border-kumo-border rounded-bl-sm"}`}>
 									<Markdown remarkPlugins={[remarkGfm]}>{msg.text}</Markdown>
@@ -144,25 +154,40 @@ export default function AgentPanel() {
 							</div>
 							
 							{/* Action Buttons for AI Drafts */}
-							{msg.role === "ai" && msg.isDraft && (
+							{msg.role === "ai" && (
 								<div className="flex items-center gap-1.5 pl-8 mt-1">
+									{msg.isDraft && (
+										<>
+											<Button 
+												variant="primary" 
+												size="sm" 
+												icon={<PaperPlaneTiltIcon size={12} />}
+												onClick={() => handleQuickSend(msg.text)}
+												disabled={replyMut.isPending}
+											>
+												Send
+											</Button>
+											<Button 
+												variant="secondary" 
+												size="sm" 
+												icon={<PencilSimpleIcon size={12} />}
+												onClick={() => handleEditDraft(msg.text)}
+												disabled={replyMut.isPending}
+											>
+												Edit
+											</Button>
+										</>
+									)}
 									<Button 
-										variant="primary" 
+										variant="ghost" 
 										size="sm" 
-										icon={<PaperPlaneTiltIcon size={12} />}
-										onClick={() => handleQuickSend(msg.text)}
-										disabled={replyMut.isPending}
+										icon={<CopyIcon size={12} />}
+										onClick={() => {
+											navigator.clipboard.writeText(msg.text);
+											toastManager.add({ title: "Copied to clipboard!" });
+										}}
 									>
-										Send
-									</Button>
-									<Button 
-										variant="secondary" 
-										size="sm" 
-										icon={<PencilSimpleIcon size={12} />}
-										onClick={() => handleEditDraft(msg.text)}
-										disabled={replyMut.isPending}
-									>
-										Edit
+										Copy
 									</Button>
 								</div>
 							)}
@@ -176,7 +201,7 @@ export default function AgentPanel() {
 						</div>
 						<div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-kumo-surface border border-kumo-border rounded-bl-sm">
 							<Loader size="sm" />
-							<span className="text-xs">Drafting...</span>
+							<span className="text-xs">Working on it...</span>
 						</div>
 					</div>
 				)}
