@@ -12,7 +12,9 @@ import {
 } from "@cloudflare/kumo";
 import { WarningIcon } from "@phosphor-icons/react";
 import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { forwardRef, useState } from "react";
+import { forwardRef, useState, useEffect, useState as reactUseState } from "react";
+import { MsalProvider, AuthenticatedTemplate, UnauthenticatedTemplate, useMsal } from "@azure/msal-react";
+import { msalInstance, loginRequest } from "~/lib/authConfig";
 import {
 	isRouteErrorResponse,
 	Links,
@@ -77,7 +79,7 @@ const KumoLink = forwardRef<
 
 export function Layout({ children }: { children: React.ReactNode }) {
 	return (
-		<html lang="en">
+		<html lang="en" className="dark">
 			<head>
 				<meta charSet="UTF-8" />
 				<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -88,7 +90,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 					sizes="48x48 32x32 16x16"
 				/>
 				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-				<title>Agentic Inbox</title>
+				<title>Zuup Mail AI</title>
 				<Meta />
 				<Links />
 			</head>
@@ -109,20 +111,52 @@ export function HydrateFallback() {
 	);
 }
 
-export default function App() {
-	// Use useState to ensure each SSR request gets a fresh client while the
-	// browser reuses the same singleton across navigations.
-	const [queryClient] = useState(getQueryClient);
+function LoginScreen() {
+	const { instance } = useMsal();
 	return (
-		<QueryClientProvider client={queryClient}>
-			<LinkProvider component={KumoLink}>
-				<TooltipProvider>
-					<Toasty>
-						<Outlet />
-					</Toasty>
-				</TooltipProvider>
-			</LinkProvider>
-		</QueryClientProvider>
+		<div className="flex flex-col items-center justify-center min-h-screen bg-kumo-recessed text-kumo-default">
+			<div className="p-8 bg-kumo-surface border border-kumo-border rounded-lg shadow-sm text-center">
+				<h1 className="text-2xl font-semibold mb-4">Welcome to Zuup Mail AI</h1>
+				<p className="mb-6 text-kumo-inactive">Please sign in with your Microsoft account to continue. Welcome to Zuup Mail AI.</p>
+				<Button variant="primary" onClick={() => instance.loginRedirect(loginRequest)}>
+					Sign in with Microsoft
+				</Button>
+			</div>
+		</div>
+	);
+}
+
+export default function App() {
+	const [queryClient] = useState(getQueryClient);
+	const [isMsalInitialized, setIsMsalInitialized] = reactUseState(false);
+
+	useEffect(() => {
+		msalInstance.initialize().then(() => {
+			setIsMsalInitialized(true);
+		});
+	}, []);
+
+	if (!isMsalInitialized) {
+		return <HydrateFallback />;
+	}
+
+	return (
+		<MsalProvider instance={msalInstance}>
+			<QueryClientProvider client={queryClient}>
+				<LinkProvider component={KumoLink}>
+					<TooltipProvider>
+						<Toasty>
+							<AuthenticatedTemplate>
+								<Outlet />
+							</AuthenticatedTemplate>
+							<UnauthenticatedTemplate>
+								<LoginScreen />
+							</UnauthenticatedTemplate>
+						</Toasty>
+					</TooltipProvider>
+				</LinkProvider>
+			</QueryClientProvider>
+		</MsalProvider>
 	);
 }
 

@@ -2,8 +2,39 @@
 @import "@cloudflare/kumo/styles/tailwind";
 @import "tailwindcss";
 
+@theme {
+  --color-kumo-base: #0f131b;
+  --color-kumo-recessed: #07090e;
+  --color-kumo-surface: #0f131b;
+  --color-kumo-elevated: #23283b;
+  --color-kumo-border: #23283b;
+  --color-kumo-line: #23283b;
+  --color-kumo-fill: #23283b;
+  --color-kumo-control: #23283b;
+  --color-kumo-primary-base: #ff3d7f;
+  --color-kumo-primary-hover: #e02a64;
+  --color-kumo-primary-active: #c51c4e;
+  --color-kumo-brand: #ff3d7f;
+  --color-kumo-default: #ffffff;
+  --color-kumo-strong: #ffffff;
+  --color-kumo-subtle: #9ca3af;
+  --color-kumo-inactive: #9ca3af;
+  --color-kumo-tint: #23283b;
+}
+
+:root, .dark, html, body {
+  background-color: var(--color-kumo-recessed, #07090e) !important;
+  color: var(--color-kumo-default, #ffffff) !important;
+  color-scheme: dark;
+}
+
+/* Fallback overrides in case components use hardcoded colors or generic white */
+.bg-white { background-color: #0f131b !important; }
+[class*="bg-white"] { background-color: #0f131b !important; }
+
 body {
   margin: 0;
+  background-color: var(--kumo-color-recessed);
 }
 
 /* TipTap list styles */

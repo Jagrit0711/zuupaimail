@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import DOMPurify from "dompurify";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 interface EmailIframeProps {
 	body: string;
@@ -55,9 +55,8 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 		return () => window.removeEventListener("message", handleMessage);
 	}, [handleMessage]);
 
-	useEffect(() => {
-		const iframe = iframeRef.current;
-		if (!iframe || !body) return;
+	const srcDocContent = useMemo(() => {
+		if (!body || typeof window === "undefined") return "";
 
 		const cleanBody = DOMPurify.sanitize(body, {
 			USE_PROFILES: { html: true },
@@ -68,9 +67,6 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 
 		const padding = autoSize ? "0" : "24px";
 
-		// Height-reporting script: sends body.scrollHeight to the parent.
-		// Runs inside the opaque-origin sandbox so it has zero access to
-		// the parent page — it can only postMessage.
 		const heightScript = autoSize
 			? `<script>
 				function reportHeight() {
@@ -84,9 +80,7 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 			<\/script>`
 			: "";
 
-		// Use srcdoc so the iframe is truly sandboxed (no same-origin access).
-		// We can't use doc.write() because that requires allow-same-origin.
-		iframe.srcdoc = `<!DOCTYPE html>
+		return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -95,15 +89,15 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 <style>
 * { box-sizing: border-box; }
 html {
-	background: #ffffff;
-	color-scheme: light;
+	background: #0f131b;
+	color-scheme: dark;
 }
 body {
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 	font-size: 14px;
 	line-height: 1.6;
-	color: #1a1a1a;
-	background: #ffffff;
+	color: #ffffff;
+	background: #0f131b;
 	padding: ${padding};
 	margin: 0;
 	word-wrap: break-word;
@@ -113,26 +107,30 @@ body {
 [style*="position: fixed"], [style*="position:fixed"], [style*="position: absolute"], [style*="position:absolute"] {
 	position: relative !important;
 }
-a { color: #2563eb; }
+a { color: #ff3d7f; }
 img { max-width: 100%; height: auto; }
 blockquote {
-	border-left: 3px solid #d1d5db;
+	border-left: 3px solid #23283b;
 	padding-left: 1em;
 	margin-left: 0;
-	color: #6b7280;
+	color: #9ca3af;
 }
 pre {
-	background: #f3f4f6;
+	background: #07090e;
 	padding: 12px;
 	border-radius: 6px;
 	overflow-x: auto;
 	font-size: 13px;
+	color: #ffffff;
 }
 table { border-collapse: collapse; max-width: 100%; }
-td, th { padding: 4px 8px; }
+td, th { padding: 4px 8px; border-color: #23283b !important; }
 p { margin: 4px 0; }
-h1, h2, h3 { margin: 8px 0 4px; }
+h1, h2, h3, h4, h5 { margin: 8px 0 4px; color: #ffffff !important; }
 ul, ol { padding-left: 20px; margin: 4px 0; }
+/* Override inline styles for dark mode */
+[style*="color:"] { color: #ffffff !important; }
+[style*="background-color: #ffffff"], [style*="background: #ffffff"], [style*="background-color:#ffffff"], [style*="background:#ffffff"] { background-color: transparent !important; }
 </style>
 </head>
 <body>${cleanBody}${heightScript}</body>
@@ -146,6 +144,7 @@ ul, ol { padding-left: 20px; margin: 4px 0; }
 			style={autoSize ? { height: `${height}px` } : { height: "100%" }}
 			sandbox="allow-scripts allow-popups allow-top-navigation-by-user-activation"
 			title="Email content"
+			srcDoc={srcDocContent}
 		/>
 	);
 }

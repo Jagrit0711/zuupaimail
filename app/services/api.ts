@@ -3,6 +3,24 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import type { Email, Folder, Mailbox } from "~/types";
+import { msalInstance, loginRequest } from "~/lib/authConfig";
+
+async function getAccessToken() {
+	if (typeof window === "undefined") return null;
+	try {
+		const accounts = msalInstance.getAllAccounts();
+		if (accounts.length > 0) {
+			const response = await msalInstance.acquireTokenSilent({
+				...loginRequest,
+				account: accounts[0],
+			});
+			return response.accessToken;
+		}
+	} catch (error) {
+		console.error("Failed to acquire MSAL token:", error);
+	}
+	return null;
+}
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -31,13 +49,19 @@ async function request<T>(
 		: controller.signal;
 
 	try {
+		const token = await getAccessToken();
+		const headers: Record<string, string> = {
+			"Content-Type": "application/json",
+			...(options.headers as Record<string, string>),
+		};
+		if (token) {
+			headers["Authorization"] = `Bearer ${token}`;
+		}
+
 		const res = await fetch(url, {
 			...options,
 			signal,
-			headers: {
-				"Content-Type": "application/json",
-				...(options.headers as Record<string, string>),
-			},
+			headers,
 		});
 
 		if (!res.ok) {
