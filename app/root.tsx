@@ -106,7 +106,7 @@ export function HydrateFallback() {
 }
 
 function LoginScreen() {
-	const { instance } = useMsal();
+	const { instance, inProgress } = useMsal();
 	return (
 		<div className="flex flex-col min-h-screen bg-[#09090b] text-kumo-default relative overflow-x-hidden font-sans">
 			{/* Aesthetic Background Glows */}
@@ -135,13 +135,15 @@ function LoginScreen() {
 				<div className="flex items-center gap-4">
 					<button 
 						onClick={() => instance.loginRedirect(loginRequest).catch(console.error)}
-						className="text-sm font-medium text-zinc-400 hover:text-white transition-colors hidden sm:block"
+						disabled={inProgress !== "none"}
+						className={`text-sm font-medium text-zinc-400 hover:text-white transition-colors hidden sm:block ${inProgress !== "none" ? "opacity-50 cursor-not-allowed" : ""}`}
 					>
 						Sign In
 					</button>
 					<button 
 						onClick={() => instance.loginRedirect(loginRequest).catch(console.error)}
-						className="text-sm font-medium bg-gradient-to-r from-rose-500 to-pink-500 text-white px-4 py-2 rounded-md hover:opacity-90 transition-opacity shadow-[0_0_15px_rgba(244,63,94,0.3)]"
+						disabled={inProgress !== "none"}
+						className={`text-sm font-medium bg-gradient-to-r from-rose-500 to-pink-500 text-white px-4 py-2 rounded-md hover:opacity-90 transition-opacity shadow-[0_0_15px_rgba(244,63,94,0.3)] ${inProgress !== "none" ? "opacity-50 cursor-not-allowed" : ""}`}
 					>
 						Get Started →
 					</button>
@@ -172,7 +174,8 @@ function LoginScreen() {
 				<div className="flex flex-col sm:flex-row items-center gap-4 mb-10">
 					<button 
 						onClick={() => instance.loginRedirect(loginRequest).catch(console.error)}
-						className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-medium rounded-lg hover:opacity-90 transition-opacity shadow-[0_0_20px_rgba(244,63,94,0.4)] flex items-center justify-center gap-2"
+						disabled={inProgress !== "none"}
+						className={`w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-medium rounded-lg hover:opacity-90 transition-opacity shadow-[0_0_20px_rgba(244,63,94,0.4)] flex items-center justify-center gap-2 ${inProgress !== "none" ? "opacity-50 cursor-not-allowed" : ""}`}
 					>
 						Create Account →
 					</button>
