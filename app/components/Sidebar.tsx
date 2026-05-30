@@ -122,8 +122,19 @@ export default function Sidebar() {
 
 	return (
 		<aside className="h-full w-64 bg-kumo-recessed flex flex-col shrink-0 border-r border-kumo-line">
-			{/* Back + identity */}
+			{/* Logo + Identity */}
 			<div className="px-4 pt-4 pb-1">
+				<div 
+					className="flex items-center gap-2 mb-4 cursor-pointer hover:opacity-80 transition-opacity" 
+					onClick={() => { navigate("/"); closeSidebar(); }}
+				>
+					<img 
+						src="https://raw.githubusercontent.com/Jagrit0711/zuup-main/bc25cc6dafa9026827ffffa84f5d6740d86950ab/public/lovable-uploads/b44b8051-6117-4b37-999d-014c4c33dd13.png" 
+						className="w-6 h-6 rounded-md" 
+						alt="Zuup Logo"
+					/>
+					<span className="font-bold text-kumo-default tracking-wide">Zuup</span>
+				</div>
 				<button
 					type="button"
 					onClick={() => {

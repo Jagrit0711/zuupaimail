@@ -60,12 +60,35 @@ app.get("/api/v1/mailboxes", async (c) => {
 
 app.get("/api/v1/mailboxes/:mailboxId", async (c) => {
 	const user = await graphFetch("/me", c);
+	
+	// Fetch DO settings
+	const id = c.env.CHAT_SESSION.idFromName("default");
+	const stub = c.env.CHAT_SESSION.get(id);
+	const doSettingsRes = await stub.fetch(new Request("http://do/settings"));
+	const doSettings = doSettingsRes.ok ? await doSettingsRes.json() : {};
+
 	return c.json({
 		id: user.mail || user.userPrincipalName,
 		email: user.mail || user.userPrincipalName,
 		name: user.displayName,
-		settings: { fromName: user.displayName }
+		settings: { fromName: user.displayName, ...doSettings }
 	});
+});
+
+app.put("/api/v1/mailboxes/:mailboxId", async (c) => {
+	const body = await c.req.json();
+	const settings = body.settings || {};
+	
+	// Forward settings to DO
+	const id = c.env.CHAT_SESSION.idFromName("default");
+	const stub = c.env.CHAT_SESSION.get(id);
+	await stub.fetch(new Request("http://do/settings", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(settings)
+	}));
+
+	return c.json({ status: "success" });
 });
 
 // -- Helpers for Mapping Graph to Agentic Inbox --

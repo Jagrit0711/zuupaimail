@@ -16,12 +16,35 @@ export class ChatSession extends DurableObject<Env> {
 				content TEXT NOT NULL,
 				type TEXT NOT NULL,
 				timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-			)
+			);
+			CREATE TABLE IF NOT EXISTS settings (
+				key TEXT PRIMARY KEY,
+				value TEXT NOT NULL
+			);
 		`);
 	}
 
 	async fetch(request: Request): Promise<Response> {
 		const url = new URL(request.url);
+
+		if (url.pathname.endsWith("/settings")) {
+			if (request.method === "GET") {
+				const cursor = this.sql.exec("SELECT key, value FROM settings");
+				const settings = [...cursor].reduce((acc: any, row: any) => {
+					acc[row.key] = JSON.parse(row.value);
+					return acc;
+				}, {});
+				return Response.json(settings);
+			}
+			
+			if (request.method === "POST") {
+				const body = await request.json() as any;
+				for (const [key, value] of Object.entries(body)) {
+					this.sql.exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, JSON.stringify(value));
+				}
+				return Response.json({ success: true });
+			}
+		}
 
 		if (request.method === "GET" && url.pathname.endsWith("/history")) {
 			const cursor = this.sql.exec("SELECT role, content, type FROM messages ORDER BY timestamp ASC");

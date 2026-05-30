@@ -1,98 +1,79 @@
 <div align="center">
-  <h1>Agentic Inbox</h1>
-  <p><em>A self-hosted email client with an AI agent, running entirely on Cloudflare Workers</em></p>
+  <img src="https://raw.githubusercontent.com/Jagrit0711/zuup-main/bc25cc6dafa9026827ffffa84f5d6740d86950ab/public/lovable-uploads/b44b8051-6117-4b37-999d-014c4c33dd13.png" alt="Zuup Logo" width="120" height="120">
+  <br>
+  <h1>Zuup Agentic Inbox</h1>
+  <p><strong>Your Inbox, Automated.</strong></p>
+  <br>
 </div>
 
-Agentic Inbox lets you send, receive, and manage emails through a modern web interface -- all powered by your own Cloudflare account. Incoming emails arrive via [Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/), each mailbox is isolated in its own [Durable Object](https://developers.cloudflare.com/durable-objects/) with a SQLite database, and attachments are stored in [R2](https://developers.cloudflare.com/r2/).
+Welcome to **Zuup Agentic Inbox**! This isn't just an email client; it's a fully autonomous, stateful AI agent that lives inside your inbox. Built entirely on Cloudflare Workers, Durable Objects, and Llama 3.1, Zuup Mail learns how you write, triages incoming emails, and auto-replies on your behalf.
 
-An **AI-powered Email Agent** can read your inbox, search conversations, and draft replies -- built with the [Cloudflare Agents SDK](https://developers.cloudflare.com/agents/) and [Workers AI](https://developers.cloudflare.com/workers-ai/).
+> Built for founders, by founders who are tired of writing the same "Here's the Slack link!" email for the 400th time.
 
-![Agentic Inbox screenshot](./demo_app.png)
+---
 
+## ✨ Features
 
-Read the blog post to learn more about Cloudflare Email Service and how to use it with the Agents SDK, MCP, and from the Wrangler CLI: [Email for Agents](https://blog.cloudflare.com/email-for-agents/).
+- **🧠 Autonomous Auto-Reply**: The AI Agent dynamically scrapes your past Sent Items to learn your exact tone, writing style, and context. If someone asks a question you've answered before, the agent just handles it.
+- **🛡️ Human Fallback Escalation**: If an email is too complex, involves a negotiation, or requires sensitive info, the AI generates a Support Ticket ID and forwards the thread to your fallback email address.
+- **💬 Conversational UI Panel**: Chat with your inbox! Ask "Summarize my unread emails" or "Find emails from John" and watch the agent securely query the Microsoft Graph API using native tool-calling.
+- **💾 100% Persistent State**: No expensive vector databases here. Your chat history and global agent settings are stored on the edge using Cloudflare Durable Objects + Embedded SQLite.
+- **🚀 Edge-Native Architecture**: No cold starts, no massive Node.js servers. Everything runs on Cloudflare Workers and Cloudflare Email Routing bindings.
 
-## How to setup
+## 🛠️ Architecture Deep Dive
 
-**Important**: Clicking the 'Deploy to Cloudflare' button is only one part of the setup. You must follow the **After deploying** steps as well. For a full step-by-step guide with screenshots, refer to this comment: 
-https://github.com/cloudflare/agentic-inbox/issues/4#issuecomment-4269118513
+Zuup Mail is powered by three core pillars:
+1. **The Edge Worker** (`index.ts`): The React Router SSR server and REST API bridge.
+2. **The Stateful Brain** (`ChatSession.ts`): A Cloudflare Durable Object containing an embedded SQLite database that persists all chat history and global user settings. It handles all tool-dispatching for the AI.
+3. **The Email Router** (`agenticEmail.ts`): A background worker triggered directly by Cloudflare Email Routing. When an email hits your domain, it wakes up, fetches your MS Graph context, runs a Llama 3.1 inference, and either sends an auto-reply or forwards it to you.
 
-### To set up
+## 🚀 Getting Started
 
-1. Deploy to Cloudflare. The deploy flow will automatically provision R2, Durable Objects, and Workers AI. You'll be prompted for **DOMAINS**, which is the domain (yourdomain.com) you want to receive emails for (email@yourdomain.com).
+Want this for yourself? Fork it, deploy it, and never write a repetitive email again.
 
-     [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/agentic-inbox)
+### Prerequisites
+- A Cloudflare account (with Workers AI and Email Routing enabled)
+- A Microsoft Azure App Registration (for Microsoft Graph API access)
+- Node.js (v18+)
 
-2. **Configure Cloudflare Access** -- Enable [one-click Cloudflare Access](https://developers.cloudflare.com/changelog/post/2025-10-03-one-click-access-for-workers/) on your Worker under Settings > Domains & Routes. The modal will show your `POLICY_AUD` and `TEAM_DOMAIN` values. `TEAM_DOMAIN` can be either your Access team URL or the full `.../cdn-cgi/access/certs` URL. **You must set these as secrets for your Worker.**
-3. **Set up Email Routing** -- In the Cloudflare dashboard, go to your domain > Email Routing and create a catch-all rule that forwards to this Worker
-4. **Enable Email Service** -- The worker needs the `send_email` binding to send outbound emails. See [Email Service docs](https://developers.cloudflare.com/email-routing/email-workers/send-email-workers/)
-5. **Create a mailbox** -- Visit your deployed app and create a mailbox for any address on your domain (e.g. `hello@example.com`)
+### Installation
 
-### Troubleshooting Access
+1. **Clone the repo**
+   ```bash
+   git clone https://github.com/Jagrit0711/zuupaimail.git
+   cd zuupaimail
+   ```
 
-1. If you see `Invalid or expired Access token`, that usually means `POLICY_AUD` or `TEAM_DOMAIN` secrets are incorrect.
-   * Resolution: [turn Access off and back on for the Worker to get the Access modal again](https://developers.cloudflare.com/changelog/post/2025-10-03-one-click-access-for-workers/), then reset your Worker secrets to the latest `POLICY_AUD` and `TEAM_DOMAIN` values shown there.
-2. If you see `Cloudflare Access must be configured in production`, this application is intentionally enforcing Cloudflare Access so your inbox is not exposed to anyone on the internet.
-   * Resolution: enable Access using [one-click Cloudflare Access for Workers](https://developers.cloudflare.com/changelog/post/2025-10-03-one-click-access-for-workers/), then set the `POLICY_AUD` and `TEAM_DOMAIN` Worker secrets from the modal values.
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-## Features
+3. **Configure Environment Variables**
+   Create a `.dev.vars` file in the root directory:
+   ```env
+   AZURE_CLIENT_ID=your_client_id
+   AZURE_CLIENT_SECRET=your_client_secret
+   AZURE_TENANT_ID=your_tenant_id
+   HUMAN_FALLBACK_EMAIL=you@yourdomain.com
+   ```
 
-- **Full email client** — Send and receive emails via Cloudflare Email Routing with a rich text composer, reply/forward threading, folder organization, search, and attachments
-- **Per-mailbox isolation** — Each mailbox runs in its own Durable Object with SQLite storage and R2 for attachments
-- **Built-in AI agent** — Side panel with 9 email tools for reading, searching, drafting, and sending
-- **Auto-draft on new email** — Agent automatically reads inbound emails and generates draft replies, always requiring explicit confirmation before sending
-- **Configurable and persistent** — Custom system prompts per mailbox, persistent chat history, streaming markdown responses, and tool call visibility
+4. **Local Development**
+   ```bash
+   npm run dev
+   ```
 
-## Stack
+5. **Deploy to Edge**
+   ```bash
+   npx wrangler deploy
+   ```
 
-- **Frontend:** React 19, React Router v7, Tailwind CSS, Zustand, TipTap, `@cloudflare/kumo`
-- **Backend:** Hono, Cloudflare Workers, Durable Objects (SQLite), R2, Email Routing
-- **AI Agent:** Cloudflare Agents SDK (`AIChatAgent`), AI SDK v6, Workers AI (`@cf/moonshotai/kimi-k2.5`), `react-markdown` + `remark-gfm`
-- **Auth:** Cloudflare Access JWT validation (required outside local development)
+> **Note**: Cloudflare Email Routing only triggers workers that are deployed to the edge. To test the autonomous auto-reply feature, you must deploy your worker to production!
 
-## Getting Started
+## 🧑‍💻 Contributing
 
-```bash
-npm install
-npm run dev
-```
+Pull requests are welcome! If you want to add support for Google Workspace or anthropic models, feel free to open an issue or PR.
 
-### Configuration
+## 📄 License
 
-1. Set your domain in `wrangler.jsonc`
-2. Create an R2 bucket named `agentic-inbox`: `wrangler r2 bucket create agentic-inbox`
-
-### Deploy
-
-```bash
-npm run deploy
-```
-
-## Prerequisites
-
-- Cloudflare account with a domain
-- [Email Routing](https://developers.cloudflare.com/email-routing/) enabled for receiving
-- [Email Service](https://developers.cloudflare.com/email-service/) enabled for sending
-- [Workers AI](https://developers.cloudflare.com/workers-ai/) enabled (for the agent)
-- [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/) configured for deployed/shared environments (required in production)
-
-Any user who passes the shared Cloudflare Access policy can access all mailboxes in this app by design. This includes the MCP server at `/mcp` -- external AI tools (Claude Code, Cursor, etc.) connected via MCP can operate on any mailbox by passing a `mailboxId` parameter. There is no per-mailbox authorization; the Cloudflare Access policy is the single trust boundary.
-
-## Architecture
-
-```
-┌──────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Browser    │────>│  Hono Worker     │────>│  MailboxDO      │
-│  React SPA   │     │  (API + SSR)     │     │  (SQLite + R2)  │
-│  Agent Panel │     │                  │     └─────────────────┘
-└──────┬───────┘     │  /agents/* ──────┼────>┌─────────────────┐
-       │             │                  │     │  EmailAgent DO  │
-       │ WebSocket   │                  │     │  (AIChatAgent)  │
-       └─────────────┤                  │     │  9 email tools  │
-                     │                  │────>│  Workers AI     │
-                     └──────────────────┘     └─────────────────┘
-```
-
-## License
-
-Apache 2.0 -- see [LICENSE](LICENSE).
+Apache 2.0. Go build cool things. 🚀

@@ -23,12 +23,15 @@ import {
 	useMailboxes,
 } from "~/queries/mailboxes";
 import { queryKeys } from "~/queries/keys";
+import { useMsal } from "@azure/msal-react";
+import { loginRequest } from "~/lib/authConfig";
 
 export function meta() {
 	return [{ title: "Agentic Inbox" }];
 }
 
 export default function HomeRoute() {
+	const { instance } = useMsal();
 	const toastManager = useKumoToastManager();
 	const { data: mailboxes = [], refetch: refetchMailboxes, isFetched: mailboxesFetched } = useMailboxes();
 	const createMailbox = useCreateMailbox();
@@ -149,17 +152,15 @@ export default function HomeRoute() {
 							<Button
 								variant="primary"
 								icon={<PlusIcon size={16} />}
-								onClick={() => setIsCreateOpen(true)}
+								onClick={() => instance.loginRedirect({ ...loginRequest, prompt: "select_account" })}
 							>
 								New Mailbox
 							</Button>
 						)}
 					</div>
-					{domains.length > 0 && (
-						<p className="text-sm text-kumo-subtle mt-1">
-							{domains.join(", ")}
-						</p>
-					)}
+					<p className="text-sm text-kumo-subtle mt-1">
+						mail.zuup.dev
+					</p>
 				</div>
 
 				{isLoading ? (
@@ -224,15 +225,15 @@ export default function HomeRoute() {
 							<p className="text-sm text-kumo-subtle max-w-sm mb-5">
 								{isConfigured
 									? "Your email routing is configured but no mailboxes have been created yet. They will appear here automatically."
-									: "Create a mailbox to start sending and receiving emails with your domain."}
+									: "Connect your Microsoft account to start sending and receiving emails."}
 							</p>
 							{!isConfigured && (
 								<Button
 									variant="primary"
 									icon={<PlusIcon size={16} />}
-									onClick={() => setIsCreateOpen(true)}
+									onClick={() => instance.loginRedirect({ ...loginRequest, prompt: "select_account" })}
 								>
-									Create Mailbox
+									Connect Microsoft Account
 								</Button>
 							)}
 						</div>

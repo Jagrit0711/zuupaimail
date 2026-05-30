@@ -20,12 +20,14 @@ export default function SettingsRoute() {
 
 	const [displayName, setDisplayName] = useState("");
 	const [agentPrompt, setAgentPrompt] = useState("");
+	const [agentAutoReplyEnabled, setAgentAutoReplyEnabled] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
 
 	useEffect(() => {
 		if (mailbox) {
 			setDisplayName(mailbox.settings?.fromName || mailbox.name || "");
 			setAgentPrompt(mailbox.settings?.agentSystemPrompt || "");
+			setAgentAutoReplyEnabled(mailbox.settings?.agentAutoReplyEnabled || false);
 		}
 	}, [mailbox]);
 
@@ -36,6 +38,7 @@ export default function SettingsRoute() {
 			...mailbox.settings,
 			fromName: displayName,
 			agentSystemPrompt: agentPrompt.trim() || undefined,
+			agentAutoReplyEnabled,
 		};
 		try {
 			await updateMailboxMutation.mutateAsync({ mailboxId, settings });
@@ -123,6 +126,30 @@ export default function SettingsRoute() {
 					<p className="text-xs text-kumo-subtle mt-2">
 						The prompt is sent as the system message to the AI model.
 						It controls the agent's personality, writing style, and behavior rules.
+					</p>
+				</div>
+
+				{/* Agentic Auto-Reply */}
+				<div className="rounded-lg border border-kumo-line bg-kumo-base p-5">
+					<div className="flex items-center justify-between mb-2">
+						<div className="flex items-center gap-2">
+							<RobotIcon size={16} weight="duotone" className="text-kumo-primary" />
+							<span className="text-sm font-medium text-kumo-default">
+								Agentic Auto-Reply
+							</span>
+						</div>
+						<div className="flex items-center">
+							<input 
+								type="checkbox" 
+								className="toggle toggle-primary" 
+								checked={agentAutoReplyEnabled}
+								onChange={(e) => setAgentAutoReplyEnabled(e.target.checked)}
+							/>
+						</div>
+					</div>
+					<p className="text-xs text-kumo-subtle mb-3">
+						When enabled, the AI will automatically read your incoming emails, learn from your past sent emails, and reply automatically. 
+						Complex questions will be forwarded to your fallback email address for manual review.
 					</p>
 				</div>
 
