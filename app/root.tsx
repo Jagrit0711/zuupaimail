@@ -84,7 +84,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<meta charSet="UTF-8" />
 				<link rel="icon" type="image/png" href="https://raw.githubusercontent.com/Jagrit0711/zuup-main/bc25cc6dafa9026827ffffa84f5d6740d86950ab/public/lovable-uploads/b44b8051-6117-4b37-999d-014c4c33dd13.png" />
 				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-				<title>Zuup Agentic Inbox</title>
+				<title>Zuup Mail</title>
 				<Meta />
 				<Links />
 			</head>
@@ -134,13 +134,13 @@ function LoginScreen() {
 				</div>
 				<div className="flex items-center gap-4">
 					<button 
-						onClick={() => instance.loginRedirect(loginRequest)}
+						onClick={() => instance.loginRedirect(loginRequest).catch(console.error)}
 						className="text-sm font-medium text-zinc-400 hover:text-white transition-colors hidden sm:block"
 					>
 						Sign In
 					</button>
 					<button 
-						onClick={() => instance.loginRedirect(loginRequest)}
+						onClick={() => instance.loginRedirect(loginRequest).catch(console.error)}
 						className="text-sm font-medium bg-gradient-to-r from-rose-500 to-pink-500 text-white px-4 py-2 rounded-md hover:opacity-90 transition-opacity shadow-[0_0_15px_rgba(244,63,94,0.3)]"
 					>
 						Get Started →
@@ -171,7 +171,7 @@ function LoginScreen() {
 				
 				<div className="flex flex-col sm:flex-row items-center gap-4 mb-10">
 					<button 
-						onClick={() => instance.loginRedirect(loginRequest)}
+						onClick={() => instance.loginRedirect(loginRequest).catch(console.error)}
 						className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-medium rounded-lg hover:opacity-90 transition-opacity shadow-[0_0_20px_rgba(244,63,94,0.4)] flex items-center justify-center gap-2"
 					>
 						Create Account →
