@@ -69,12 +69,12 @@ export class ChatSession extends DurableObject<Env> {
 			const systemPrompt = `You are the Zuup Agent, a stateful UI assistant.
 You have access to the user's Microsoft Graph Inbox via tools. If they ask you to search, summarize, or read their emails, YOU MUST USE THE TOOLS PROVIDED. Do not hallucinate tools.
 
-When you are ready to respond to the user (after using tools, or if no tools are needed), you MUST output your final response as a valid JSON object in this exact format:
-{
-  "type": "chat" | "draft",
-  "text": "Your conversational response OR the drafted email body"
-}
-Do not wrap the final JSON in markdown blockquotes, just output the raw JSON.`;
+When you are ready to respond to the user (after using tools, or if no tools are needed), you MUST output your final response wrapped in XML tags in this exact format:
+<response>
+  <type>chat or draft</type>
+  <text>Your conversational response OR the drafted email body</text>
+</response>
+Do not use JSON. Use the exact XML format above.`;
 
 			let messages: any[] = [
 				{ role: "system", content: systemPrompt },
@@ -198,33 +198,36 @@ Do not wrap the final JSON in markdown blockquotes, just output the raw JSON.`;
 
 					// Append tool result and run again using standard roles to avoid Cloudflare AI schema strictness
 					messages.push({ role: "assistant", content: `I need to use the ${toolCall.name} tool.` });
-					messages.push({ role: "user", content: `The tool '${toolCall.name}' returned the following data:\n${toolResult}\n\nNow, fulfill the user's request. If the user asked for a summary, YOU MUST provide a highly detailed, comprehensive summary. Extract specific names, dates, amounts, and actionable items from the data. Do not just give a high-level overview. YOU MUST output your final response as a valid JSON object in this format:\n{"type": "chat", "text": "your detailed response here"}` });
+					messages.push({ role: "user", content: `The tool '${toolCall.name}' returned the following data:\n${toolResult}\n\nNow, fulfill the user's request. If the user asked for a summary, YOU MUST provide a highly detailed, comprehensive summary. Extract specific names, dates, amounts, and actionable items from the data. Do not just give a high-level overview. YOU MUST output your final response wrapped in XML in this format:\n<response>\n  <type>chat</type>\n  <text>your detailed response here</text>\n</response>` });
 
 					aiResponse = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", { messages });
 				}
 
-				// @ts-ignore
 				const rawText = aiResponse.response || "";
 				let parsed = { type: "chat", text: rawText };
 				
-				const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-				if (jsonMatch) {
-					try {
-						// Clean unescaped newlines inside the JSON string which Llama sometimes does
-						const cleanedJson = jsonMatch[0].replace(/\n/g, "\\n").replace(/\r/g, "");
-						const temp = JSON.parse(cleanedJson);
-						if (temp.type) parsed.type = temp.type;
-						if (temp.text || temp.content || temp.response) {
-							parsed.text = temp.text || temp.content || temp.response;
+				// Try parsing XML first
+				const typeMatch = rawText.match(/<type>\s*([\s\S]*?)\s*<\/type>/i);
+				if (typeMatch) parsed.type = typeMatch[1].trim();
+				
+				const textMatch = rawText.match(/<text>\s*([\s\S]*?)\s*<\/text>/i);
+				if (textMatch) {
+					parsed.text = textMatch[1].trim();
+				} else {
+					// Fallback for JSON if it ignored the XML instruction
+					const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+					if (jsonMatch) {
+						try {
+							// Try native parse first
+							const temp = JSON.parse(jsonMatch[0]);
+							if (temp.type) parsed.type = temp.type;
+							if (temp.text || temp.content) parsed.text = temp.text || temp.content;
+						} catch (e) {
+							// Try regex extraction as last resort
+							const fallbackText = rawText.match(/"(?:text|content)"\s*:\s*"([\s\S]*?)"\s*\}/);
+							if (fallbackText) parsed.text = fallbackText[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
 						}
-					} catch (e) {
-						console.error("JSON Parse Error:", e, "Raw:", rawText);
 					}
-				}
-
-				// Clean up the escaped newlines for rendering
-				if (parsed.text) {
-					parsed.text = parsed.text.replace(/\\n/g, "\n");
 				}
 
 				finalResponseText = parsed.text || rawText || "No response generated.";

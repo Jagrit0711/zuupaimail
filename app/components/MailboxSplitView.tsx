@@ -20,7 +20,7 @@ export default function MailboxSplitView({
 	const isPanelOpen = selectedEmailId !== null || isComposing;
 
 	return (
-		<div className="flex h-full">
+		<div className="flex h-full min-w-0 w-full">
 			<div
 				className={`flex flex-col min-w-0 shrink-0 ${
 					isPanelOpen

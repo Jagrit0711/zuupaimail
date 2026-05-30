@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { createRequestHandler } from "react-router";
 import { app as apiApp } from "./index";
 import type { Env } from "./types";
-import { handleIncomingEmail } from "./agenticEmail";
+import { handleScheduled } from "./agenticEmail";
 
 declare module "react-router" {
 	export interface AppLoadContext {
@@ -40,7 +40,7 @@ app.all("*", (c) => {
 // Export the Hono app as the default export
 export default {
 	fetch: app.fetch,
-	email: handleIncomingEmail,
+	scheduled: handleScheduled,
 };
 
 export { ChatSession } from "./ChatSession";
