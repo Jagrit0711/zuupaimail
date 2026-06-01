@@ -45,17 +45,49 @@ app.get("/api/v1/config", (c) => {
 
 // -- Mailboxes ------------------------------------------------------
 app.get("/api/v1/mailboxes", async (c) => {
+	const id = c.env.CHAT_SESSION.idFromName("default");
+	const stub = c.env.CHAT_SESSION.get(id);
+
 	try {
-		const user = await graphFetch("/me", c);
-		return c.json([{
-			id: user.mail || user.userPrincipalName,
-			email: user.mail || user.userPrincipalName,
-			name: user.displayName,
-			settings: { fromName: user.displayName }
-		}]);
+		// Attempt to get the current user if a token is provided
+		const token = c.req.header("Authorization");
+		if (token && token !== "null" && token !== "undefined") {
+			const user = await graphFetch("/me", c);
+			const email = user.mail || user.userPrincipalName;
+			
+			// Store this user's profile and token in the DO
+			await stub.fetch(new Request("http://do/settings", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ 
+					[`profile_${email}`]: {
+						id: email,
+						email: email,
+						name: user.displayName,
+						settings: { fromName: user.displayName }
+					},
+					[`token_${email}`]: token
+				})
+			}));
+		}
 	} catch (e) {
-		return c.json([{ id: "default", email: "auth_required@example.com", name: "Please Login" }]);
+		console.warn("Failed to fetch /me from graph (token may be expired or missing)", e);
 	}
+
+	// Now fetch all stored profiles from the DO and return them
+	const doSettingsRes = await stub.fetch(new Request("http://do/settings"));
+	if (doSettingsRes.ok) {
+		const doSettings = await doSettingsRes.json() as any;
+		const profiles = Object.keys(doSettings)
+			.filter(key => key.startsWith("profile_"))
+			.map(key => doSettings[key]);
+		
+		if (profiles.length > 0) {
+			return c.json(profiles);
+		}
+	}
+
+	return c.json([{ id: "default", email: "auth_required@example.com", name: "Please Login" }]);
 });
 
 app.get("/api/v1/mailboxes/:mailboxId", async (c) => {
