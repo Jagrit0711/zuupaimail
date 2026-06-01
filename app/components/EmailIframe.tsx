@@ -140,18 +140,7 @@ table { border-collapse: collapse; max-width: 100%; }
 td, th { padding: 4px 8px; border-color: #23283b !important; }
 p { margin: 4px 0; }
 h1, h2, h3, h4, h5 { margin: 8px 0 4px; color: #ffffff !important; }
-/* Bulletproof Dark Mode Text Overrides */
-* { color: inherit !important; }
-body { color: #ffffff !important; }
-a, a * { color: #ff3d7f !important; text-decoration: none; }
-a:hover, a *:hover { text-decoration: underline; }
 
-/* Remove common light backgrounds */
-[style*="background-color: #ffffff" i], [style*="background: #ffffff" i], 
-[style*="background-color:#ffffff" i], [style*="background:#ffffff" i], 
-[style*="background-color: white" i], [style*="background: white" i] { 
-	background-color: transparent !important; 
-}
 </style>
 </head>
 <body>${cleanBody}${heightScript}</body>

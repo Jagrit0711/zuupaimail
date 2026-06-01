@@ -66,11 +66,43 @@ export class ChatSession extends DurableObject<Env> {
 				content: r.content 
 			}));
 
+			let recentEmailsContext = "No recent emails available.";
+			if (graphToken) {
+				try {
+					const recentRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages?$top=50&$select=subject,sender,toRecipients,bodyPreview&$orderby=receivedDateTime DESC`, {
+						headers: { "Authorization": graphToken }
+					});
+					if (recentRes.ok) {
+						const recentData = await recentRes.json() as any;
+						const msgs = recentData.value || [];
+						recentEmailsContext = msgs.map((m: any, i: number) => {
+							const sender = m.sender?.emailAddress?.address || "Unknown";
+							const to = m.toRecipients?.map((r:any) => r.emailAddress?.address).join(",") || "Unknown";
+							return `[${i+1}] To: ${to} | From: ${sender} | Subj: ${m.subject} | Preview: ${m.bodyPreview?.substring(0, 100)}`;
+						}).join("\n");
+					}
+				} catch (e) {
+					console.error("Failed to fetch recent emails for context", e);
+				}
+			}
+
 			const systemPrompt = `You are the Zuup Agent, an autonomous UI assistant.
 You have access to the user's Microsoft Graph Inbox natively. You can search their inbox and send emails on their behalf.
 Available Tools:
 1. <tool><name>search_emails</name><query>your search query</query></tool>
 2. <tool><name>send_email</name><to>recipient email</to><subject>email subject</subject><body>html or text body</body></tool>
+
+Below is a compressed text log of the user's 50 most recent emails. Use this memory to find recent contacts, context, and email addresses without needing to search!
+<recent_emails>
+${recentEmailsContext}
+</recent_emails>
+
+IMPORTANT INSTRUCTIONS:
+- If a user asks you to email someone, FIRST look for their address in the <recent_emails> block above.
+- If you use search_emails to find a person/company's email address, you MUST verify that the search results actually contain the correct entity. 
+- DO NOT hallucinate or guess email addresses. 
+- DO NOT send an email to a random search result (like GitGuardian) if it is not the exact entity the user asked for.
+- If you cannot find the correct email address for the requested recipient in the search results, STOP and ask the user for their email address.
 
 If you need to use a tool, output ONLY the tool XML block. Wait for the user to provide the <tool_result> before continuing.
 If you are finished and ready to respond to the user, you MUST output your final response wrapped in XML tags in this exact format:
