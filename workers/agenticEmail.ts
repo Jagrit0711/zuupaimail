@@ -5,18 +5,17 @@ export async function handleScheduled(controller: ScheduledController, env: Env,
 		console.log(`Cron triggered at ${new Date().toISOString()}`);
 
 		// 1. Check Global Settings
-		let autoReplyEnabled = false;
+		let autoReplyEnabled = true; // default to true so it works autonomously even if DO fetch fails
 		try {
 			const id = env.CHAT_SESSION.idFromName("default");
 			const stub = env.CHAT_SESSION.get(id);
 			const doSettingsRes = await stub.fetch(new Request("http://do/settings"));
 			if (doSettingsRes.ok) {
 				const doSettings = await doSettingsRes.json() as any;
-				// Default to true so it works autonomously immediately
 				autoReplyEnabled = doSettings.agentAutoReplyEnabled !== false;
 			}
 		} catch (e) {
-			console.error("Failed to fetch DO settings for auto-reply check", e);
+			console.error("Failed to fetch DO settings for auto-reply check, defaulting to true", e);
 		}
 
 		if (!autoReplyEnabled) {
