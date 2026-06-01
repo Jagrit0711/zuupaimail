@@ -30,6 +30,16 @@ const app = new Hono<{ Bindings: Env }>();
 // Mount the API routes
 app.route("/", apiApp);
 
+// Test route to manually trigger the background cron job in local dev!
+app.get("/test-cron", async (c) => {
+	try {
+		await handleScheduled({} as any, c.env, c.executionCtx as ExecutionContext);
+		return c.text("Agentic Cron Job executed successfully! Check your terminal logs for details.");
+	} catch (e: any) {
+		return c.text("Cron Job failed: " + e.message, 500);
+	}
+});
+
 // React Router catch-all: serves the SPA for all non-API routes
 app.all("*", (c) => {
 	return requestHandler(c.req.raw, {
