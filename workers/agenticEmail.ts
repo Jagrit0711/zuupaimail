@@ -12,7 +12,8 @@ export async function handleScheduled(controller: ScheduledController, env: Env,
 			const doSettingsRes = await stub.fetch(new Request("http://do/settings"));
 			if (doSettingsRes.ok) {
 				const doSettings = await doSettingsRes.json() as any;
-				autoReplyEnabled = doSettings.agentAutoReplyEnabled === true;
+				// Default to true so it works autonomously immediately
+				autoReplyEnabled = doSettings.agentAutoReplyEnabled !== false;
 			}
 		} catch (e) {
 			console.error("Failed to fetch DO settings for auto-reply check", e);

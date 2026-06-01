@@ -13,7 +13,7 @@
 		"DOMAINS": "mail.zuup.dev",
 		"AZURE_CLIENT_ID": "9a7b8329-1c9e-4dc5-a47c-1d4eef806c5d",
 		"AZURE_TENANT_ID": "6ac6a7c6-5c84-42e2-b558-236d04db78f1",
-		"HUMAN_FALLBACK_EMAIL": "jagrit@zuup.dev"
+		"HUMAN_FALLBACK_EMAIL": "hello@zuup.dev"
 	},
 	"ai": {
 		"binding": "AI"
