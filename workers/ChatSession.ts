@@ -175,7 +175,7 @@ Do not use JSON. Use the exact XML format above.`;
 							const sendPayload = {
 								message: {
 									subject,
-									body: { contentType: "HTML", content: bodyContent },
+									body: { contentType: "HTML", content: bodyContent.replace(/\n/g, "<br/>") },
 									toRecipients: to.split(",").map(t => ({ emailAddress: { address: t.trim() } }))
 								}
 							};
