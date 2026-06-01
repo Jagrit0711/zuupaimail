@@ -151,8 +151,39 @@ app.get("/api/v1/mailboxes/:mailboxId/emails", async (c) => {
 
 	try {
 		const response = await graphFetch(url, c);
-		const emails = response.value.map(mapGraphMessageToEmail);
-		return c.json({ emails, totalCount: response.value.length });
+		
+		// Group by conversationId to get thread_counts
+		const threadCounts: Record<string, number> = {};
+		response.value.forEach((msg: any) => {
+			if (msg.conversationId) {
+				threadCounts[msg.conversationId] = (threadCounts[msg.conversationId] || 0) + 1;
+			}
+		});
+
+		// Deduplicate the list to only show the newest message per thread
+		const uniqueThreads = new Map<string, any>();
+		const nonThreads: any[] = [];
+		
+		response.value.forEach((msg: any) => {
+			if (msg.conversationId) {
+				// Since graphFetch orderby is receivedDateTime DESC, the first one we see is the newest
+				if (!uniqueThreads.has(msg.conversationId)) {
+					uniqueThreads.set(msg.conversationId, msg);
+				}
+			} else {
+				nonThreads.push(msg);
+			}
+		});
+
+		const merged = [...Array.from(uniqueThreads.values()), ...nonThreads]
+			.sort((a, b) => new Date(b.receivedDateTime).getTime() - new Date(a.receivedDateTime).getTime());
+
+		const emails = merged.map((msg: any) => ({
+			...mapGraphMessageToEmail(msg),
+			thread_count: threadCounts[msg.conversationId] || 1
+		}));
+		
+		return c.json({ emails, totalCount: emails.length });
 	} catch (e) {
 		return c.json({ error: (e as Error).message }, 500);
 	}

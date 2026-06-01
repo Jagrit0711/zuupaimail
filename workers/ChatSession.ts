@@ -78,81 +78,51 @@ Do not use JSON. Use the exact XML format above.`;
 			let finalResponseText = "";
 			let finalResponseType = "chat";
 
-			if (!graphToken) {
-				finalResponseText = "Missing Microsoft Graph token, cannot contact Copilot.";
-			} else {
-				try {
-					// 1. Create Copilot Conversation
-					const convRes = await fetch("https://graph.microsoft.com/beta/copilot/conversations", {
-						method: "POST",
-						headers: { "Authorization": graphToken, "Content-Type": "application/json" },
-						body: JSON.stringify({})
-					});
-					
-					if (!convRes.ok) {
-						throw new Error(`Failed to create Copilot conversation: ${await convRes.text()}`);
-					}
-					
-					const convData = await convRes.json() as { id: string };
-					const convId = convData.id;
+			try {
+				const fullPrompt = `${systemPrompt}\n\nCurrent email context (if any):\n${emailText || "None"}\n\nUser Instruction: ${userPrompt}`;
+				
+				const messages = [
+					{ role: "system", content: systemPrompt },
+					...history,
+					{ role: "user", content: `Current email context (if any):\n${emailText || "None"}\n\nUser Instruction: ${userPrompt}` }
+				];
 
-					// Format history into the prompt
-					const historyText = history.map((h: any) => `${h.role.toUpperCase()}: ${h.content}`).join("\n\n");
-					
-					const fullPrompt = `${systemPrompt}\n\nChat History:\n${historyText}\n\nCurrent email context (if any):\n${emailText || "None"}\n\nUser Instruction: ${userPrompt}`;
+				const aiRes = await this.env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+					messages
+				}) as { response: string };
 
-					// 2. Send Chat Prompt
-					const chatRes = await fetch(`https://graph.microsoft.com/beta/copilot/conversations/${convId}/chat`, {
-						method: "POST",
-						headers: { "Authorization": graphToken, "Content-Type": "application/json" },
-						body: JSON.stringify({
-							message: {
-								text: fullPrompt
-							}
-						})
-					});
-
-					if (!chatRes.ok) {
-						throw new Error(`Failed to execute Copilot chat: ${await chatRes.text()}`);
-					}
-
-					const chatData = await chatRes.json() as any;
-					const msgs = chatData.messages || [];
-					const copilotMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
-					
-					const rawText = (copilotMsg && copilotMsg.text) ? copilotMsg.text : "No response from Copilot.";
-					
-					let parsed = { type: "chat", text: rawText };
-					
-					// Try parsing XML first
-					const typeMatch = rawText.match(/<type>\s*([\s\S]*?)\s*<\/type>/i);
-					if (typeMatch) parsed.type = typeMatch[1].trim();
-					
-					const textMatch = rawText.match(/<text>\s*([\s\S]*?)\s*<\/text>/i);
-					if (textMatch) {
-						parsed.text = textMatch[1].trim();
-					} else {
-						// Fallback for JSON if it ignored the XML instruction
-						const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-						if (jsonMatch) {
-							try {
-								const temp = JSON.parse(jsonMatch[0]);
-								if (temp.type) parsed.type = temp.type;
-								if (temp.text || temp.content) parsed.text = temp.text || temp.content;
-							} catch (e) {
-								const fallbackText = rawText.match(/"(?:text|content)"\s*:\s*"([\s\S]*?)"\s*\}/);
-								if (fallbackText) parsed.text = fallbackText[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-							}
+				const rawText = aiRes.response || "No response generated.";
+				
+				let parsed = { type: "chat", text: rawText };
+				
+				// Try parsing XML first
+				const typeMatch = rawText.match(/<type>\s*([\s\S]*?)\s*<\/type>/i);
+				if (typeMatch) parsed.type = typeMatch[1].trim();
+				
+				const textMatch = rawText.match(/<text>\s*([\s\S]*?)\s*<\/text>/i);
+				if (textMatch) {
+					parsed.text = textMatch[1].trim();
+				} else {
+					// Fallback for JSON if it ignored the XML instruction
+					const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+					if (jsonMatch) {
+						try {
+							const temp = JSON.parse(jsonMatch[0]);
+							if (temp.type) parsed.type = temp.type;
+							if (temp.text || temp.content) parsed.text = temp.text || temp.content;
+						} catch (e) {
+							const fallbackText = rawText.match(/"(?:text|content)"\s*:\s*"([\s\S]*?)"\s*\}/);
+							if (fallbackText) parsed.text = fallbackText[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
 						}
 					}
-
-					finalResponseText = parsed.text || rawText || "No response generated.";
-					finalResponseType = parsed.type === "draft" ? "draft" : "chat";
-
-				} catch (e) {
-					console.error("AI execution failed:", e);
-					finalResponseText = `An error occurred: ${e}`;
 				}
+
+				finalResponseText = parsed.text || rawText || "No response generated.";
+				finalResponseType = parsed.type === "draft" ? "draft" : "chat";
+
+			} catch (e) {
+				console.error("AI execution failed:", e);
+				finalResponseText = `An error occurred: ${e}`;
 			}
 
 			// Store AI message

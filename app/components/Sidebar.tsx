@@ -67,7 +67,9 @@ function FolderLink({
 			<span className="shrink-0">{icon}</span>
 			<span className="truncate flex-1">{label}</span>
 			{unreadCount != null && unreadCount > 0 && (
-				<Badge variant="secondary">{unreadCount}</Badge>
+				<span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-bold text-white bg-[#007DF0] rounded-full shrink-0">
+					{unreadCount > 99 ? '99+' : unreadCount}
+				</span>
 			)}
 		</NavLink>
 	);

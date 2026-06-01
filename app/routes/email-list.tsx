@@ -335,7 +335,7 @@ export default function EmailListRoute() {
 										{/* Unread dot */}
 										<div className="w-2.5 shrink-0 flex justify-center">
 											{hasUnread(email) && (
-												<div className="h-2 w-2 rounded-full bg-kumo-brand" />
+												<div className="h-2.5 w-2.5 rounded-full bg-[#007DF0]" />
 											)}
 										</div>
 
@@ -368,7 +368,7 @@ export default function EmailListRoute() {
 													{formatParticipants(email)}
 												</span>
 												{(email.thread_count ?? 1) > 1 && (
-													<span className="shrink-0 text-xs text-kumo-subtle bg-kumo-fill rounded-full px-1.5 py-0.5 font-medium">
+													<span className="shrink-0 text-[10px] bg-[#007DF0]/10 text-[#007DF0] rounded-full px-1.5 py-0.5 font-bold">
 														{email.thread_count}
 													</span>
 												)}
