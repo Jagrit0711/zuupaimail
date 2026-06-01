@@ -43,14 +43,14 @@ export async function handleScheduled(controller: ScheduledController, env: Env,
 			const tokenData = await tokenRes.json() as { access_token: string };
 			accessToken = tokenData.access_token;
 
-			// Fetch the last 50 sent emails to learn writing style
-			const sentRes = await fetch(`https://graph.microsoft.com/v1.0/users/${env.HUMAN_FALLBACK_EMAIL}/mailFolders/SentItems/messages?$top=50&$select=subject,bodyPreview&$orderby=receivedDateTime DESC`, {
+			// Fetch the last 50 emails from jagrit@zuup.dev to act as the knowledge base
+			const kbRes = await fetch(`https://graph.microsoft.com/v1.0/users/jagrit@zuup.dev/messages?$top=50&$select=subject,bodyPreview&$orderby=receivedDateTime DESC`, {
 				headers: { "Authorization": `Bearer ${accessToken}` }
 			});
 			
-			if (sentRes.ok) {
-				const sentData = await sentRes.json() as any;
-				pastEmailsContext = sentData.value.map((msg: any) => `Subject: ${msg.subject}\nContent: ${msg.bodyPreview}`).join("\n\n---\n\n");
+			if (kbRes.ok) {
+				const kbData = await kbRes.json() as any;
+				pastEmailsContext = kbData.value.map((msg: any) => `Subject: ${msg.subject}\nContent: ${msg.bodyPreview}`).join("\n\n---\n\n");
 			}
 		} else {
 			console.error("Failed to authenticate with Graph:", await tokenRes.text());
@@ -96,14 +96,18 @@ export async function handleScheduled(controller: ScheduledController, env: Env,
 				}
 			}
 
-			const systemPrompt = `You are the autonomous email agent for Jagrit Sachdev (Founder & CEO of Zuup).
+			const systemPrompt = `You are the autonomous Zuup AI agent. You manage the inbox for ${env.HUMAN_FALLBACK_EMAIL}.
 First, analyze the incoming email. 
 1. If it's a newsletter, marketing, spam, calendar invite, or a purely automated notification, set <action>ignore</action>.
-2. If it requires human attention, complex negotiation, extremely sensitive info, or you cannot confidently answer, set <action>human_required</action>.
-3. If it is a standard customer interaction, greeting, simple query, or something you can easily resolve (like providing a slack link), set <action>reply</action>.
+2. If it requires human attention, extremely sensitive info, or you cannot confidently answer, set <action>human_required</action>.
+3. If it is a standard customer interaction, greeting, simple query, or something you can easily resolve (like providing a slack link or dates), set <action>reply</action>.
 
-When replying, YOU MUST mimic Jagrit's EXACT writing style, tone, signature style, and length based on these past sent emails:
+When replying, use the following Knowledge Base (which contains recent emails, replies, and data from Jagrit) to find answers to the user's questions:
+<knowledge_base>
 ${pastEmailsContext}
+</knowledge_base>
+
+You MUST introduce yourself or sign off as the "Zuup AI". DO NOT pretend to be Jagrit personally.
 
 Output MUST be wrapped in XML like this:
 <response>
@@ -169,7 +173,7 @@ ${email.body?.content || email.bodyPreview || "No text body found."}`;
 			}
 
 			if (action === "reply" && replyText) {
-				const signature = `\n\n---\nNote: This email has been sent autonomously by ZuupMail AI Agent. If you have more questions, please reply back.`;
+				const signature = `\n\n---\nHello, I am Zuup AI. If you have any further problems, please reply back to this email.`;
 				const finalReplyText = replyText + signature;
 
 				const replyPayload = {
