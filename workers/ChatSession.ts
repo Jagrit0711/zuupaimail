@@ -66,9 +66,14 @@ export class ChatSession extends DurableObject<Env> {
 				content: r.content 
 			}));
 
-			const systemPrompt = `You are the Zuup Agent, a stateful UI assistant.
-You have access to the user's Microsoft Graph Inbox natively. Please search their inbox if needed.
-When you are ready to respond to the user, you MUST output your final response wrapped in XML tags in this exact format:
+			const systemPrompt = `You are the Zuup Agent, an autonomous UI assistant.
+You have access to the user's Microsoft Graph Inbox natively. You can search their inbox and send emails on their behalf.
+Available Tools:
+1. <tool><name>search_emails</name><query>your search query</query></tool>
+2. <tool><name>send_email</name><to>recipient email</to><subject>email subject</subject><body>html or text body</body></tool>
+
+If you need to use a tool, output ONLY the tool XML block. Wait for the user to provide the <tool_result> before continuing.
+If you are finished and ready to respond to the user, you MUST output your final response wrapped in XML tags in this exact format:
 <response>
   <type>chat or draft</type>
   <text>Your conversational response OR the drafted email body</text>
@@ -79,19 +84,86 @@ Do not use JSON. Use the exact XML format above.`;
 			let finalResponseType = "chat";
 
 			try {
-				const fullPrompt = `${systemPrompt}\n\nCurrent email context (if any):\n${emailText || "None"}\n\nUser Instruction: ${userPrompt}`;
-				
-				const messages = [
+				let messages: any[] = [
 					{ role: "system", content: systemPrompt },
 					...history,
 					{ role: "user", content: `Current email context (if any):\n${emailText || "None"}\n\nUser Instruction: ${userPrompt}` }
 				];
 
-				const aiRes = await this.env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
-					messages
-				}) as { response: string };
+				let iterations = 0;
+				let isDone = false;
+				let rawText = "";
 
-				const rawText = aiRes.response || "No response generated.";
+				while (iterations < 4 && !isDone) {
+					iterations++;
+					
+					const aiRes = await this.env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+						messages
+					}) as { response: string };
+
+					rawText = aiRes.response || "No response generated.";
+					messages.push({ role: "assistant", content: rawText });
+					
+					console.log(`[AI Iteration ${iterations}]`, rawText);
+
+					// Check for Tool Calls
+					const toolMatch = rawText.match(/<tool>([\s\S]*?)<\/tool>/i);
+					if (toolMatch && graphToken) {
+						const toolBody = toolMatch[1];
+						const nameMatch = toolBody.match(/<name>(.*?)<\/name>/i);
+						const toolName = nameMatch ? nameMatch[1].trim() : "";
+						
+						if (toolName === "search_emails") {
+							const queryMatch = toolBody.match(/<query>(.*?)<\/query>/i);
+							const query = queryMatch ? queryMatch[1].trim() : "";
+							
+							const searchRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages?$search="${query}"&$select=sender,toRecipients,subject,bodyPreview&$top=10`, {
+								headers: { "Authorization": graphToken }
+							});
+							const searchData = await searchRes.json() as any;
+							
+							const results = (searchData.value || []).map((m: any) => 
+								`Subject: ${m.subject}\nSender: ${m.sender?.emailAddress?.address}\nTo: ${m.toRecipients?.map((r:any)=>r.emailAddress?.address).join(", ")}\nPreview: ${m.bodyPreview}`
+							).join("\n\n---\n\n");
+							
+							messages.push({ role: "user", content: `<tool_result>${results || "No emails found."}</tool_result>` });
+							continue;
+						}
+						
+						if (toolName === "send_email") {
+							const toMatch = toolBody.match(/<to>(.*?)<\/to>/i);
+							const subjMatch = toolBody.match(/<subject>(.*?)<\/subject>/i);
+							const bodyMatch = toolBody.match(/<body>([\s\S]*?)<\/body>/i);
+							
+							const to = toMatch ? toMatch[1].trim() : "";
+							const subject = subjMatch ? subjMatch[1].trim() : "";
+							const bodyContent = bodyMatch ? bodyMatch[1].trim() : "";
+							
+							const sendPayload = {
+								message: {
+									subject,
+									body: { contentType: "HTML", content: bodyContent },
+									toRecipients: to.split(",").map(t => ({ emailAddress: { address: t.trim() } }))
+								}
+							};
+
+							const sendRes = await fetch(`https://graph.microsoft.com/v1.0/me/sendMail`, {
+								method: "POST",
+								headers: { "Authorization": graphToken, "Content-Type": "application/json" },
+								body: JSON.stringify(sendPayload)
+							});
+							
+							if (sendRes.ok) {
+								messages.push({ role: "user", content: `<tool_result>Email successfully sent!</tool_result>` });
+							} else {
+								messages.push({ role: "user", content: `<tool_result>Failed to send email: ${await sendRes.text()}</tool_result>` });
+							}
+							continue;
+						}
+					}
+					
+					isDone = true;
+				}
 				
 				let parsed = { type: "chat", text: rawText };
 				
@@ -103,17 +175,13 @@ Do not use JSON. Use the exact XML format above.`;
 				if (textMatch) {
 					parsed.text = textMatch[1].trim();
 				} else {
-					// Fallback for JSON if it ignored the XML instruction
 					const jsonMatch = rawText.match(/\{[\s\S]*\}/);
 					if (jsonMatch) {
 						try {
 							const temp = JSON.parse(jsonMatch[0]);
 							if (temp.type) parsed.type = temp.type;
 							if (temp.text || temp.content) parsed.text = temp.text || temp.content;
-						} catch (e) {
-							const fallbackText = rawText.match(/"(?:text|content)"\s*:\s*"([\s\S]*?)"\s*\}/);
-							if (fallbackText) parsed.text = fallbackText[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-						}
+						} catch (e) {}
 					}
 				}
 
