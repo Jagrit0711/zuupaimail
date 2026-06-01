@@ -100,15 +100,52 @@ Output MUST be wrapped in XML like this:
 Subject: ${email.subject}
 Body: ${email.body?.content || email.bodyPreview || "No text body found."}`;
 
-			const aiResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
-				messages: [
-					{ role: "system", content: systemPrompt },
-					{ role: "user", content: userPrompt }
-				]
-			});
-			
-			// @ts-ignore
-			const rawOutput = aiResponse.response || "";
+			let rawOutput = "";
+			try {
+				// 1. Create Copilot Conversation
+				const convRes = await fetch("https://graph.microsoft.com/beta/copilot/conversations", {
+					method: "POST",
+					headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+					body: JSON.stringify({})
+				});
+				
+				if (!convRes.ok) {
+					console.error("Failed to create Copilot conversation:", await convRes.text());
+					continue;
+				}
+				
+				const convData = await convRes.json() as { id: string };
+				const convId = convData.id;
+
+				// 2. Send Chat Prompt
+				const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+				const chatRes = await fetch(`https://graph.microsoft.com/beta/copilot/conversations/${convId}/chat`, {
+					method: "POST",
+					headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+					body: JSON.stringify({
+						message: {
+							text: fullPrompt
+						}
+					})
+				});
+
+				if (!chatRes.ok) {
+					console.error("Failed to execute Copilot chat:", await chatRes.text());
+					continue;
+				}
+
+				const chatData = await chatRes.json() as any;
+				// Extract response text from copilotConversation response structure
+				const msgs = chatData.messages || [];
+				// The API returns the conversation history. The last message is usually Copilot's response.
+				const copilotMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+				if (copilotMsg && copilotMsg.text) {
+					rawOutput = copilotMsg.text;
+				}
+			} catch (err) {
+				console.error("Error communicating with Copilot API:", err);
+				continue;
+			}
 			
 			let action = "human_required";
 			let replyText = "";
@@ -116,7 +153,7 @@ Body: ${email.body?.content || email.bodyPreview || "No text body found."}`;
 			const actionMatch = rawOutput.match(/<action>\s*([\s\S]*?)\s*<\/action>/i);
 			if (actionMatch) action = actionMatch[1].trim();
 			
-			const textMatch = rawText.match(/<reply_text>\s*([\s\S]*?)\s*<\/reply_text>/i);
+			const textMatch = rawOutput.match(/<reply_text>\s*([\s\S]*?)\s*<\/reply_text>/i);
 			if (textMatch) replyText = textMatch[1].trim();
 
 			console.log(`AI Decision for ${email.id}: ${action}`);

@@ -5,7 +5,7 @@
 export interface Env extends Cloudflare.Env {
 	POLICY_AUD: string;
 	TEAM_DOMAIN: string;
-	AI: Ai;
+
 	DOMAINS: string;
 	HUMAN_FALLBACK_EMAIL: string;
 	AZURE_CLIENT_ID: string;
