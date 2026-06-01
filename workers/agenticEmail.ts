@@ -58,7 +58,9 @@ export async function handleScheduled(controller: ScheduledController, env: Env,
 		}
 
 		// 3. Fetch Unread Emails from Inbox
-		const unreadRes = await fetch(`https://graph.microsoft.com/v1.0/users/${env.HUMAN_FALLBACK_EMAIL}/mailFolders/Inbox/messages?$filter=isRead eq false&$top=10&$select=id,subject,from,bodyPreview,body,conversationId`, {
+		// Since hello@zuup.dev is likely an alias, we query the primary inbox (jagrit@zuup.dev) 
+		// and filter for emails where the toRecipient contains the fallback email
+		const unreadRes = await fetch(`https://graph.microsoft.com/v1.0/users/jagrit@zuup.dev/mailFolders/Inbox/messages?$filter=isRead eq false&$top=10&$select=id,subject,from,toRecipients,bodyPreview,body,conversationId`, {
 			headers: { 
 				"Authorization": `Bearer ${accessToken}`,
 				"Prefer": 'outlook.body-content-type="text"'
@@ -77,13 +79,17 @@ export async function handleScheduled(controller: ScheduledController, env: Env,
 		// 4. Process each email
 		for (const email of unreadEmails) {
 			const sender = email.from?.emailAddress?.address;
-			if (!sender || sender === env.HUMAN_FALLBACK_EMAIL) continue;
+			if (!sender || sender === env.HUMAN_FALLBACK_EMAIL || sender === "jagrit@zuup.dev") continue;
+
+			// Ensure this email was actually sent TO the fallback email (hello@zuup.dev)
+			const isForFallback = email.toRecipients?.some((r: any) => r.emailAddress?.address?.toLowerCase() === env.HUMAN_FALLBACK_EMAIL.toLowerCase());
+			if (!isForFallback) continue;
 
 			console.log(`Processing email from ${sender}: ${email.subject}`);
 
 			let threadContext = "No specific thread history found.";
 			if (email.conversationId) {
-				const threadRes = await fetch(`https://graph.microsoft.com/v1.0/users/${env.HUMAN_FALLBACK_EMAIL}/messages?$filter=conversationId eq '${email.conversationId}'&$select=id,from,bodyPreview,receivedDateTime&$orderby=receivedDateTime desc&$top=6`, {
+				const threadRes = await fetch(`https://graph.microsoft.com/v1.0/users/jagrit@zuup.dev/messages?$filter=conversationId eq '${email.conversationId}'&$select=id,from,bodyPreview,receivedDateTime&$orderby=receivedDateTime desc&$top=6`, {
 					headers: { "Authorization": `Bearer ${accessToken}` }
 				});
 				if (threadRes.ok) {
@@ -98,9 +104,8 @@ export async function handleScheduled(controller: ScheduledController, env: Env,
 
 			const systemPrompt = `You are the autonomous Zuup AI agent. You manage the inbox for ${env.HUMAN_FALLBACK_EMAIL}.
 First, analyze the incoming email. 
-1. If it's a newsletter, marketing, spam, calendar invite, or a purely automated notification, set <action>ignore</action>.
-2. If it requires human attention, extremely sensitive info, or you cannot confidently answer, set <action>human_required</action>.
-3. If it is a standard customer interaction, greeting, simple query, or something you can easily resolve (like providing a slack link or dates), set <action>reply</action>.
+1. If it is purely an automated notification, newsletter, or spam, set <action>ignore</action>.
+2. For ANY user question, greeting, or request (even if you don't know the exact answer), you MUST set <action>reply</action>. If you don't know the answer based on the knowledge base, draft a polite reply saying you will get back to them soon, but STILL set <action>reply</action>. Do not require a human unless it's a severe emergency.
 
 When replying, use the following Knowledge Base (which contains recent emails, replies, and data from Jagrit) to find answers to the user's questions:
 <knowledge_base>
@@ -153,7 +158,7 @@ ${email.body?.content || email.bodyPreview || "No text body found."}`;
 			// Execute Action
 			if (action === "ignore") {
 				// Mark as read so we don't process it again
-				await fetch(`https://graph.microsoft.com/v1.0/users/${env.HUMAN_FALLBACK_EMAIL}/messages/${email.id}`, {
+				await fetch(`https://graph.microsoft.com/v1.0/users/jagrit@zuup.dev/messages/${email.id}`, {
 					method: "PATCH",
 					headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
 					body: JSON.stringify({ isRead: true })
@@ -165,7 +170,7 @@ ${email.body?.content || email.bodyPreview || "No text body found."}`;
 				// We don't mark it as read so the human sees it as unread.
 				// But to prevent infinite loops, we can tag it or move it, or just mark it read and flag it.
 				// For now, let's just mark it read and flag it so it stays in the inbox but doesn't get processed again.
-				await fetch(`https://graph.microsoft.com/v1.0/users/${env.HUMAN_FALLBACK_EMAIL}/messages/${email.id}`, {
+				await fetch(`https://graph.microsoft.com/v1.0/users/jagrit@zuup.dev/messages/${email.id}`, {
 					method: "PATCH",
 					headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
 					body: JSON.stringify({ isRead: true, flag: { flagStatus: "flagged" } })
@@ -180,13 +185,14 @@ ${email.body?.content || email.bodyPreview || "No text body found."}`;
 					message: {
 						subject: email.subject.startsWith("Re:") ? email.subject : `Re: ${email.subject}`,
 						body: { contentType: "text", content: finalReplyText },
-						toRecipients: [{ emailAddress: { address: sender } }]
+						toRecipients: [{ emailAddress: { address: sender } }],
+						from: { emailAddress: { address: env.HUMAN_FALLBACK_EMAIL } }
 					}
 				};
 
 				try {
-					// 1. Send the autonomous reply via Microsoft Graph
-					const sendRes = await fetch(`https://graph.microsoft.com/v1.0/users/${env.HUMAN_FALLBACK_EMAIL}/sendMail`, {
+					// 1. Send the autonomous reply via Microsoft Graph using the primary user, but sending FROM the alias
+					const sendRes = await fetch(`https://graph.microsoft.com/v1.0/users/jagrit@zuup.dev/sendMail`, {
 						method: "POST",
 						headers: { 
 							"Authorization": `Bearer ${accessToken}`,
@@ -197,7 +203,7 @@ ${email.body?.content || email.bodyPreview || "No text body found."}`;
 					
 					if (sendRes.ok) {
 						// 2. Mark the original as read
-						await fetch(`https://graph.microsoft.com/v1.0/users/${env.HUMAN_FALLBACK_EMAIL}/messages/${email.id}`, {
+						await fetch(`https://graph.microsoft.com/v1.0/users/jagrit@zuup.dev/messages/${email.id}`, {
 							method: "PATCH",
 							headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
 							body: JSON.stringify({ isRead: true })
