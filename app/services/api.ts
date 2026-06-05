@@ -5,7 +5,7 @@
 import type { Email, Folder, Mailbox } from "~/types";
 import { msalInstance, loginRequest } from "~/lib/authConfig";
 
-async function getAccessToken() {
+export async function getAccessToken() {
 	if (typeof window === "undefined") return null;
 	try {
 		const accounts = msalInstance.getAllAccounts();

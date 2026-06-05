@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Badge, Button, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
-import { RobotIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
+import { BrainIcon, RobotIcon, ArrowCounterClockwiseIcon, NotepadIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { useMailbox, useUpdateMailbox } from "~/queries/mailboxes";
@@ -20,6 +20,8 @@ export default function SettingsRoute() {
 
 	const [displayName, setDisplayName] = useState("");
 	const [agentPrompt, setAgentPrompt] = useState("");
+	const [agentKnowledgeBase, setAgentKnowledgeBase] = useState("");
+	const [agentMailboxPurpose, setAgentMailboxPurpose] = useState("");
 	const [agentAutoReplyEnabled, setAgentAutoReplyEnabled] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
 
@@ -27,6 +29,8 @@ export default function SettingsRoute() {
 		if (mailbox) {
 			setDisplayName(mailbox.settings?.fromName || mailbox.name || "");
 			setAgentPrompt(mailbox.settings?.agentSystemPrompt || "");
+			setAgentKnowledgeBase(mailbox.settings?.agentKnowledgeBase || "");
+			setAgentMailboxPurpose(mailbox.settings?.agentMailboxPurpose || "");
 			setAgentAutoReplyEnabled(mailbox.settings?.agentAutoReplyEnabled || false);
 		}
 	}, [mailbox]);
@@ -38,6 +42,8 @@ export default function SettingsRoute() {
 			...mailbox.settings,
 			fromName: displayName,
 			agentSystemPrompt: agentPrompt.trim() || undefined,
+			agentKnowledgeBase: agentKnowledgeBase.trim() || undefined,
+			agentMailboxPurpose: agentMailboxPurpose.trim() || undefined,
 			agentAutoReplyEnabled,
 		};
 		try {
@@ -127,6 +133,46 @@ export default function SettingsRoute() {
 						The prompt is sent as the system message to the AI model.
 						It controls the agent's personality, writing style, and behavior rules.
 					</p>
+				</div>
+
+				{/* AI Knowledge Base */}
+				<div className="rounded-lg border border-kumo-line bg-kumo-base p-5">
+					<div className="flex items-center gap-2 mb-4">
+						<NotepadIcon size={16} weight="duotone" className="text-kumo-subtle" />
+						<span className="text-sm font-medium text-kumo-default">
+							AI Knowledge Base
+						</span>
+					</div>
+					<p className="text-xs text-kumo-subtle mb-3">
+						Add custom facts, FAQs, company info, or any text the cron AI agent should know when auto-replying for this specific mailbox. This is used by the background agent that processes emails autonomously.
+					</p>
+					<textarea
+						value={agentKnowledgeBase}
+						onChange={(e) => setAgentKnowledgeBase(e.target.value)}
+						placeholder={`Example:\n- hello@zuup.dev handles general inquiries about Zuup products\n- FAR AWAY hackathon registration deadline is July 1st 2026\n- Refunds take 5–7 business days\n- For urgent issues, escalate to jagrit@zuup.dev`}
+						rows={10}
+						className="w-full resize-y rounded-lg border border-kumo-line bg-kumo-recessed px-3 py-2 text-xs text-kumo-default placeholder:text-kumo-subtle focus:outline-none focus:ring-1 focus:ring-kumo-ring font-mono leading-relaxed"
+					/>
+				</div>
+
+				{/* Mailbox Purpose */}
+				<div className="rounded-lg border border-kumo-line bg-kumo-base p-5">
+					<div className="flex items-center gap-2 mb-4">
+						<BrainIcon size={16} weight="duotone" className="text-kumo-subtle" />
+						<span className="text-sm font-medium text-kumo-default">
+							Mailbox Purpose / Role
+						</span>
+					</div>
+					<p className="text-xs text-kumo-subtle mb-3">
+						Describe what this mailbox is for and who typically reads it. This tells the AI agent the context and tone for auto-replies. Example: <em>"Handle sponsorship inquiries for FAR AWAY hackathon. Respond formally."</em>
+					</p>
+					<textarea
+						value={agentMailboxPurpose}
+						onChange={(e) => setAgentMailboxPurpose(e.target.value)}
+						placeholder="e.g. This mailbox handles all general inquiries from Zuup community members. Replies should be warm, concise, and helpful. Jagrit reviews flagged emails."
+						rows={4}
+						className="w-full resize-y rounded-lg border border-kumo-line bg-kumo-recessed px-3 py-2 text-xs text-kumo-default placeholder:text-kumo-subtle focus:outline-none focus:ring-1 focus:ring-kumo-ring font-mono leading-relaxed"
+					/>
 				</div>
 
 				{/* Agentic Auto-Reply */}

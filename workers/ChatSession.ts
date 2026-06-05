@@ -31,7 +31,11 @@ export class ChatSession extends DurableObject<Env> {
 			if (request.method === "GET") {
 				const cursor = this.sql.exec("SELECT key, value FROM settings");
 				const settings = [...cursor].reduce((acc: any, row: any) => {
-					acc[row.key] = JSON.parse(row.value);
+					const parsed = JSON.parse(row.value);
+					// Skip null entries (represent deleted items)
+					if (parsed !== null) {
+						acc[row.key] = parsed;
+					}
 					return acc;
 				}, {});
 				return Response.json(settings);

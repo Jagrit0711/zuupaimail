@@ -3,6 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader } from "@cloudflare/kumo";
 
 interface EmailIframeProps {
 	body: string;
@@ -30,6 +31,7 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [height, setHeight] = useState(autoSize ? 100 : 0);
 	const [srcDocContent, setSrcDocContent] = useState("");
+	const [isLoading, setIsLoading] = useState(!!body);
 
 	// Listen for height reports from the sandboxed iframe
 	const handleMessage = useCallback(
@@ -58,8 +60,10 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 	useEffect(() => {
 		if (!body || typeof window === "undefined") {
 			setSrcDocContent("");
+			setIsLoading(false);
 			return;
 		}
+		setIsLoading(true);
 
 		let isMounted = true;
 
@@ -147,8 +151,10 @@ h1, h2, h3, h4, h5 { margin: 8px 0 4px; color: #ffffff !important; }
 </html>`;
 
 				setSrcDocContent(htmlContent);
+				setIsLoading(false);
 			} catch (e) {
 				console.error("Failed to sanitize iframe body:", e);
+				setIsLoading(false);
 			}
 		};
 
@@ -158,6 +164,28 @@ h1, h2, h3, h4, h5 { margin: 8px 0 4px; color: #ffffff !important; }
 			isMounted = false;
 		};
 	}, [body, autoSize]);
+
+	if (isLoading) {
+		return (
+			<div
+				className="flex items-center justify-center w-full"
+				style={autoSize ? { height: `${height || 200}px` } : { height: "100%" }}
+			>
+				<Loader size="md" />
+			</div>
+		);
+	}
+
+	if (!srcDocContent) {
+		return (
+			<div
+				className="flex items-center justify-center w-full text-kumo-subtle text-sm"
+				style={autoSize ? { height: `${height || 100}px` } : { height: "100%" }}
+			>
+				No content
+			</div>
+		);
+	}
 
 	return (
 		<iframe

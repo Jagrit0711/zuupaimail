@@ -5,7 +5,6 @@
 import {
 	Button,
 	Dialog,
-	Empty,
 	Input,
 	Loader,
 	Select,
@@ -131,16 +130,9 @@ export default function HomeRoute() {
 		}
 	};
 
-	const isConfigured = emailAddresses.length > 0;
-	const accounts = isConfigured
-		? emailAddresses.map((addr) => ({
-				id: addr,
-				email: addr,
-				name: addr.split("@")[0] || addr,
-			}))
-		: mailboxes;
+	const accounts = mailboxes.filter(m => m.email && m.email !== "auth_required@example.com");
 
-	const isLoading = !configData;
+	const isLoading = !mailboxesFetched;
 
 	return (
 		<div className="min-h-screen bg-kumo-recessed">
@@ -148,15 +140,13 @@ export default function HomeRoute() {
 				<div className="mb-8">
 					<div className="flex items-center justify-between">
 						<h1 className="text-2xl font-bold text-kumo-default">Mailboxes</h1>
-						{!isConfigured && (
-							<Button
-								variant="primary"
-								icon={<PlusIcon size={16} />}
-								onClick={() => instance.loginRedirect({ ...loginRequest, prompt: "select_account" })}
-							>
-								New Mailbox
-							</Button>
-						)}
+						<Button
+							variant="primary"
+							icon={<PlusIcon size={16} />}
+							onClick={() => instance.loginRedirect({ ...loginRequest, prompt: "select_account" })}
+						>
+							Add Account
+						</Button>
 					</div>
 					<p className="text-sm text-kumo-subtle mt-1">
 						mail.zuup.dev
@@ -188,7 +178,7 @@ export default function HomeRoute() {
 										{account.email}
 									</div>
 								</div>
-								{!isConfigured && (
+								{account.email !== "auth_required@example.com" && (
 									<Button
 										variant="ghost"
 										size="sm"
@@ -223,19 +213,15 @@ export default function HomeRoute() {
 								No mailboxes yet
 							</h3>
 							<p className="text-sm text-kumo-subtle max-w-sm mb-5">
-								{isConfigured
-									? "Your email routing is configured but no mailboxes have been created yet. They will appear here automatically."
-									: "Connect your Microsoft account to start sending and receiving emails."}
+								Connect your Microsoft account to start sending and receiving emails with the Zuup AI agent.
 							</p>
-							{!isConfigured && (
-								<Button
-									variant="primary"
-									icon={<PlusIcon size={16} />}
-									onClick={() => instance.loginRedirect({ ...loginRequest, prompt: "select_account" })}
-								>
-									Connect Microsoft Account
-								</Button>
-							)}
+							<Button
+								variant="primary"
+								icon={<PlusIcon size={16} />}
+								onClick={() => instance.loginRedirect({ ...loginRequest, prompt: "select_account" })}
+							>
+								Connect Microsoft Account
+							</Button>
 						</div>
 					</div>
 				)}

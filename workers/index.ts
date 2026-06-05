@@ -49,13 +49,18 @@ app.get("/api/v1/mailboxes", async (c) => {
 	const stub = c.env.CHAT_SESSION.get(id);
 
 	try {
-		// Attempt to get the current user if a token is provided
+		// Attempt to register the current logged-in user if a token is provided
 		const token = c.req.header("Authorization");
 		if (token && token !== "null" && token !== "undefined") {
 			const user = await graphFetch("/me", c);
 			const email = user.mail || user.userPrincipalName;
 			
-			// Store this user's profile and token in the DO
+			// Fetch existing profile so we can merge settings
+			const existingSettingsRes = await stub.fetch(new Request("http://do/settings"));
+			const existingSettings = existingSettingsRes.ok ? await existingSettingsRes.json() as any : {};
+			const existingProfile = existingSettings[`profile_${email}`] || {};
+
+			// Merge: preserve any existing per-mailbox settings the user has saved
 			await stub.fetch(new Request("http://do/settings", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -64,7 +69,10 @@ app.get("/api/v1/mailboxes", async (c) => {
 						id: email,
 						email: email,
 						name: user.displayName,
-						settings: { fromName: user.displayName }
+						settings: { 
+							fromName: user.displayName,
+							...(existingProfile.settings || {})
+						}
 					},
 					[`token_${email}`]: token
 				})
@@ -74,13 +82,21 @@ app.get("/api/v1/mailboxes", async (c) => {
 		console.warn("Failed to fetch /me from graph (token may be expired or missing)", e);
 	}
 
-	// Now fetch all stored profiles from the DO and return them
+	// Fetch all stored profiles from the DO and return them
 	const doSettingsRes = await stub.fetch(new Request("http://do/settings"));
 	if (doSettingsRes.ok) {
 		const doSettings = await doSettingsRes.json() as any;
 		const profiles = Object.keys(doSettings)
 			.filter(key => key.startsWith("profile_"))
-			.map(key => doSettings[key]);
+			.map(key => {
+				const profile = doSettings[key];
+				// Merge per-mailbox settings stored under mailbox_settings_<email>
+				const perMailboxSettings = doSettings[`mailbox_settings_${profile.email}`] || {};
+				return {
+					...profile,
+					settings: { ...(profile.settings || {}), ...perMailboxSettings }
+				};
+			});
 		
 		if (profiles.length > 0) {
 			return c.json(profiles);
@@ -90,38 +106,164 @@ app.get("/api/v1/mailboxes", async (c) => {
 	return c.json([{ id: "default", email: "auth_required@example.com", name: "Please Login" }]);
 });
 
+// POST /api/v1/mailboxes - manually register a mailbox (for non-OAuth accounts like other Zuup members)
+app.post("/api/v1/mailboxes", async (c) => {
+	try {
+		const body = await c.req.json();
+		const email = body.email;
+		const name = body.name || email?.split("@")[0] || email;
+		
+		if (!email) return c.json({ error: "email is required" }, 400);
+
+		const id = c.env.CHAT_SESSION.idFromName("default");
+		const stub = c.env.CHAT_SESSION.get(id);
+
+		// Fetch existing profile (don't overwrite settings if profile exists)
+		const existingSettingsRes = await stub.fetch(new Request("http://do/settings"));
+		const existingSettings = existingSettingsRes.ok ? await existingSettingsRes.json() as any : {};
+		const existingProfile = existingSettings[`profile_${email}`];
+
+		const profile = existingProfile || {
+			id: email,
+			email,
+			name,
+			settings: { fromName: name, ...(body.settings || {}) }
+		};
+
+		if (!existingProfile) {
+			await stub.fetch(new Request("http://do/settings", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ [`profile_${email}`]: profile })
+			}));
+		}
+
+		return c.json(profile, 201);
+	} catch (e: any) {
+		return c.json({ error: e.message }, 500);
+	}
+});
+
 app.get("/api/v1/mailboxes/:mailboxId", async (c) => {
-	const user = await graphFetch("/me", c);
+	const mailboxId = c.req.param("mailboxId");
 	
-	// Fetch DO settings
+	// Fetch from DO first (stored profiles are the source of truth)
 	const id = c.env.CHAT_SESSION.idFromName("default");
 	const stub = c.env.CHAT_SESSION.get(id);
 	const doSettingsRes = await stub.fetch(new Request("http://do/settings"));
-	const doSettings = doSettingsRes.ok ? await doSettingsRes.json() : {};
+	const doSettings = doSettingsRes.ok ? await doSettingsRes.json() as any : {};
 
-	return c.json({
-		id: user.mail || user.userPrincipalName,
-		email: user.mail || user.userPrincipalName,
-		name: user.displayName,
-		settings: { fromName: user.displayName, ...doSettings }
-	});
+	// Try to find the profile by email key
+	const profileKey = `profile_${mailboxId}`;
+	const storedProfile = doSettings[profileKey];
+	// Merge per-mailbox knowledge settings
+	const perMailboxSettings = doSettings[`mailbox_settings_${mailboxId}`] || {};
+
+	if (storedProfile) {
+		return c.json({
+			...storedProfile,
+			settings: { ...(storedProfile.settings || {}), ...perMailboxSettings }
+		});
+	}
+
+	// Fallback: try to get from Graph if a valid token is available
+	try {
+		const token = c.req.header("Authorization");
+		if (token && token !== "null") {
+			const user = await graphFetch("/me", c);
+			const email = user.mail || user.userPrincipalName;
+			return c.json({
+				id: email,
+				email,
+				name: user.displayName,
+				settings: { fromName: user.displayName, ...perMailboxSettings }
+			});
+		}
+	} catch (e) {
+		console.warn("Fallback /me fetch failed for mailboxId:", mailboxId, e);
+	}
+
+	return c.json({ id: mailboxId, email: mailboxId, name: mailboxId, settings: perMailboxSettings });
+});
+
+app.delete("/api/v1/mailboxes/:mailboxId", async (c) => {
+	const mailboxId = c.req.param("mailboxId");
+	const id = c.env.CHAT_SESSION.idFromName("default");
+	const stub = c.env.CHAT_SESSION.get(id);
+
+	// Delete the profile and associated token/settings from DO
+	// We store null to mark it as deleted (DO doesn't have a delete key API, so we overwrite with empty)
+	await stub.fetch(new Request("http://do/settings", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ 
+			[`profile_${mailboxId}`]: null,
+			[`token_${mailboxId}`]: null,
+			[`mailbox_settings_${mailboxId}`]: null
+		})
+	}));
+
+	return c.json({ status: "deleted" });
 });
 
 app.put("/api/v1/mailboxes/:mailboxId", async (c) => {
+	const mailboxId = c.req.param("mailboxId");
 	const body = await c.req.json();
 	const settings = body.settings || {};
 	
 	// Forward settings to DO
 	const id = c.env.CHAT_SESSION.idFromName("default");
 	const stub = c.env.CHAT_SESSION.get(id);
-	await stub.fetch(new Request("http://do/settings", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(settings)
-	}));
+
+	// Update both the profile settings and any top-level settings keys
+	// First, read existing profile to merge fromName/agentSystemPrompt etc.
+	const doSettingsRes = await stub.fetch(new Request("http://do/settings"));
+	const doSettings = doSettingsRes.ok ? await doSettingsRes.json() as any : {};
+	const existingProfile = doSettings[`profile_${mailboxId}`];
+
+	const updatePayload: Record<string, any> = {};
+
+	// Extract per-profile fields vs top-level settings
+	const { agentKnowledgeBase, agentMailboxPurpose, agentAutoReplyEnabled, fromName, agentSystemPrompt, ...restSettings } = settings;
+
+	// Update the profile's nested settings
+	if (existingProfile) {
+		updatePayload[`profile_${mailboxId}`] = {
+			...existingProfile,
+			settings: {
+				...(existingProfile.settings || {}),
+				...(fromName !== undefined ? { fromName } : {}),
+				...(agentSystemPrompt !== undefined ? { agentSystemPrompt } : {}),
+				...(agentKnowledgeBase !== undefined ? { agentKnowledgeBase } : {}),
+				...(agentMailboxPurpose !== undefined ? { agentMailboxPurpose } : {}),
+				...(agentAutoReplyEnabled !== undefined ? { agentAutoReplyEnabled } : {}),
+			}
+		};
+	}
+
+	// Handle any nested mailbox_settings_<email> keys passed in (from the settings page double-save)
+	for (const [key, value] of Object.entries(restSettings)) {
+		if (key.startsWith("mailbox_settings_")) {
+			updatePayload[key] = value;
+		}
+	}
+
+	// Also save agentAutoReplyEnabled at top level for backward compat
+	if (agentAutoReplyEnabled !== undefined) {
+		updatePayload.agentAutoReplyEnabled = agentAutoReplyEnabled;
+	}
+
+	if (Object.keys(updatePayload).length > 0) {
+		await stub.fetch(new Request("http://do/settings", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(updatePayload)
+		}));
+	}
 
 	return c.json({ status: "success" });
 });
+
 
 // -- Helpers for Mapping Graph to Agentic Inbox --
 const mapGraphMessageToEmail = (msg: any) => ({
